@@ -9,6 +9,9 @@
     "lint": "next lint",
     "test:filters": "npx tsx --test src/lib/jobs/filter-jobs-by-preferences.test.ts",
     "test:applied": "npx tsx --test src/lib/jobs/applied-job-exclusions.test.ts",
+    "test:search-query": "npx tsx --test src/lib/jobs/build-job-search-query.test.ts",
+    "test:dismissed": "npx tsx --test src/lib/jobs/dismissed-job-exclusions.test.ts",
+    "test:linkedin-jd": "npx tsx --test src/lib/linkedin/extract-job-description.test.ts",
     "verify:css": "node scripts/verify-tailwind.mjs",
     "build:verify": "npm run build && npm run verify:css"
   },

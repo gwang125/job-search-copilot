@@ -1,6 +1,10 @@
 import * as cheerio from "cheerio";
 import type { ParsedJob } from "@/types/database";
-import { parseLinkedInJobViaGuestApi } from "@/lib/linkedin/guest-api";
+import {
+  parseLinkedInJobViaGuestApi,
+  parseLinkedInJobViaViewPage,
+} from "@/lib/linkedin/guest-api";
+import { extractLinkedInJobDescriptionFromHtml } from "@/lib/linkedin/extract-job-description";
 import {
   extractLinkedInJobId,
   isLinkedInJobUrl,
@@ -50,6 +54,11 @@ async function parseLinkedInJob(
     if (guest && guest.jobDescription.length >= 200) {
       return guest;
     }
+
+    const viewPage = await parseLinkedInJobViaViewPage(jobId);
+    if (viewPage && viewPage.jobDescription.length >= 200) {
+      return viewPage;
+    }
   }
 
   if (accessToken) {
@@ -62,6 +71,10 @@ async function parseLinkedInJob(
       const guestRetry = await parseLinkedInJobViaGuestApi(jobId);
       if (guestRetry && guestRetry.jobDescription.length >= 200) {
         return guestRetry;
+      }
+      const viewRetry = await parseLinkedInJobViaViewPage(jobId);
+      if (viewRetry && viewRetry.jobDescription.length >= 200) {
+        return viewRetry;
       }
     }
   }
@@ -193,14 +206,9 @@ function extractJobFromHtml(html: string): ParsedJob {
       .trim() ||
     null;
 
-  const mainText =
-    $(".description__text, .show-more-less-html__markup").text() ||
-    $("main").text() ||
-    $('[role="main"]').text() ||
-    $(".job-description, .description, #job-description, article").text() ||
-    $("body").text();
-
-  const jobDescription = mainText.replace(/\s+/g, " ").trim().slice(0, 20000);
+  const jobDescription =
+    extractLinkedInJobDescriptionFromHtml(html) ||
+    $("main").text().replace(/\s+/g, " ").trim().slice(0, 20000);
 
   if (jobDescription.length < 200) {
     throw new Error(

@@ -20,6 +20,7 @@ import {
 import {
   Compass,
   ExternalLink,
+  EyeOff,
   Loader2,
   ScanSearch,
   Star,
@@ -61,11 +62,15 @@ export function JobDiscoveryPanel({
   const [error, setError] = useState<string | null>(null);
   const [jobs, setJobs] = useState<DiscoveredJobMatch[]>([]);
   const [meta, setMeta] = useState<{
-    listingsFound: number;
+    candidatesChecked: number;
     hiddenByApplied: number;
+    hiddenByNotConsider?: number;
     hiddenByPreferences: number;
+    jobsShown: number;
     resumeName: string;
+    searchQueryReason?: string;
   } | null>(null);
+  const [dismissingId, setDismissingId] = useState<string | null>(null);
 
   const skipNextSave = useRef(false);
 
@@ -136,6 +141,40 @@ export function JobDiscoveryPanel({
     setError(null);
   }
 
+  async function markNotConsider(job: DiscoveredJobMatch) {
+    setDismissingId(job.linkedInJobId);
+    setError(null);
+    try {
+      const res = await fetch("/api/jobs/dismiss", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          linkedInJobId: job.linkedInJobId,
+          jobUrl: job.jobUrl,
+          title: job.title,
+          company: job.company,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error ?? "Could not save preference");
+      }
+      setJobs((prev) => prev.filter((j) => j.linkedInJobId !== job.linkedInJobId));
+      setMeta((prev) =>
+        prev
+          ? {
+              ...prev,
+              hiddenByNotConsider: (prev.hiddenByNotConsider ?? 0) + 1,
+            }
+          : prev
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not hide job");
+    } finally {
+      setDismissingId(null);
+    }
+  }
+
   async function runSearch(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -165,10 +204,13 @@ export function JobDiscoveryPanel({
       }
       setJobs(data.jobs ?? []);
       setMeta({
-        listingsFound: data.listingsFound ?? 0,
+        candidatesChecked: data.candidatesChecked ?? data.listingsFound ?? 0,
         hiddenByApplied: data.hiddenByApplied ?? 0,
+        hiddenByNotConsider: data.hiddenByNotConsider ?? 0,
         hiddenByPreferences: data.hiddenByPreferences ?? 0,
+        jobsShown: data.jobsShown ?? (data.jobs?.length ?? 0),
         resumeName: data.resumeUsed?.name ?? "Resume",
+        searchQueryReason: data.searchQueryReason,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Search failed");
@@ -195,8 +237,10 @@ export function JobDiscoveryPanel({
     <div className="space-y-6">
       <Alert>
         Results come from LinkedIn&apos;s public job search. Listings at companies
-        you already applied to are skipped, along with your profile hard requirements,
-        before AI scoring. Your last search stays in this tab until you search again.{" "}
+        you already applied to are skipped, along with jobs you marked{" "}
+        <span className="font-medium">Not consider</span>, and your profile hard
+        requirements, before AI scoring. Your last search stays in this tab until you
+        search again.{" "}
         <Link href="/profile" className="font-medium text-indigo-600 hover:underline">
           Edit hard requirements
         </Link>
@@ -337,25 +381,42 @@ export function JobDiscoveryPanel({
       {meta && !loading && (
         <p className="text-sm text-zinc-600">
           Scored against <span className="font-medium">{meta.resumeName}</span>
-          {meta.listingsFound > 0 && (
+          {meta.candidatesChecked > 0 || jobs.length > 0 ? (
             <>
               {" "}
-              · {meta.listingsFound} found
-              {meta.hiddenByApplied > 0 && (
+              · {jobs.length} job{jobs.length === 1 ? "" : "s"} shown
+              {meta.candidatesChecked > 0 && (
                 <>
-                  , {meta.hiddenByApplied} at companies you already applied to
+                  . {meta.candidatesChecked} candidate
+                  {meta.candidatesChecked === 1 ? "" : "s"} checked
                 </>
               )}
               {meta.hiddenByPreferences > 0 && (
-                <>, {meta.hiddenByPreferences} hidden by your filters</>
+                <>
+                  . {meta.hiddenByPreferences} filtered by your preferences
+                </>
               )}
-              {jobs.length > 0 && <>, {jobs.length} shown</>}
+              {meta.hiddenByApplied > 0 && (
+                <>
+                  . {meta.hiddenByApplied} at companies you already applied to
+                </>
+              )}
+              {(meta.hiddenByNotConsider ?? 0) > 0 && (
+                <>
+                  . {meta.hiddenByNotConsider} marked not consider
+                </>
+              )}
             </>
-          )}
+          ) : null}
           {jobs.length === 0 &&
             (meta.hiddenByApplied > 0 || meta.hiddenByPreferences > 0
               ? " · remaining jobs were hidden by filters, already applied, or match score"
               : " · no jobs met your minimum match score")}
+          {meta.searchQueryReason && (
+            <span className="mt-1 block text-xs text-zinc-500">
+              {meta.searchQueryReason}
+            </span>
+          )}
         </p>
       )}
 
@@ -421,6 +482,21 @@ export function JobDiscoveryPanel({
                             Analyze
                           </Button>
                         </Link>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={dismissingId === job.linkedInJobId}
+                          onClick={() => markNotConsider(job)}
+                          title="Hide this job from future Find Jobs searches"
+                        >
+                          {dismissingId === job.linkedInJobId ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <EyeOff className="h-3.5 w-3.5" />
+                          )}
+                          Not consider
+                        </Button>
                       </div>
                     </td>
                   </tr>

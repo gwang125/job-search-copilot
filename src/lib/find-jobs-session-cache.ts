@@ -1,7 +1,7 @@
 import type { DiscoveredJobMatch } from "@/types/database";
 import type { LinkedInPostedWithin, LinkedInWorkType } from "@/lib/linkedin/search-jobs";
 
-const STORAGE_VERSION = 3;
+const STORAGE_VERSION = 4;
 
 export interface FindJobsSessionFilters {
   keywords: string;
@@ -14,8 +14,13 @@ export interface FindJobsSessionFilters {
 }
 
 export interface FindJobsSessionMeta {
-  listingsFound: number;
+  candidatesChecked: number;
+  hiddenByApplied: number;
+  hiddenByNotConsider?: number;
+  hiddenByPreferences: number;
+  jobsShown: number;
   resumeName: string;
+  searchQueryReason?: string;
 }
 
 export interface FindJobsSessionCache {

@@ -119,6 +119,17 @@ export interface Job {
   updated_at: string;
 }
 
+/** Find Jobs: listings the user chose not to consider again */
+export interface JobSearchDismissal {
+  id: string;
+  user_id: string;
+  linkedin_job_id: string;
+  job_url: string | null;
+  job_title: string | null;
+  company: string | null;
+  created_at: string;
+}
+
 export interface Application {
   id: string;
   user_id: string;

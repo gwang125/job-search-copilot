@@ -16,9 +16,16 @@ import {
   type AppliedApplicationRow,
 } from "@/lib/jobs/applied-job-exclusions";
 import {
+  filterListingsExcludingDismissed,
+  type JobSearchDismissalRow,
+} from "@/lib/jobs/dismissed-job-exclusions";
+import {
+  buildJobSearchQueryFromPreferences,
+  listingFailsQuickExclusion,
+} from "@/lib/jobs/build-job-search-query";
+import {
   partitionJobsByPreferences,
   type JobForPreferenceFilter,
-  type JobPreferenceFilterResult,
 } from "@/lib/jobs/filter-jobs-by-preferences";
 import type { JobSearchPreferences, Profile, Resume } from "@/types/database";
 
@@ -41,6 +48,10 @@ export interface DiscoveredJobMatch {
   matchScore: number;
   matchNote: string;
 }
+
+const LINKEDIN_PAGE_SIZE = 25;
+const MAX_PAGES = 5;
+const MAX_CANDIDATES_TO_INSPECT = 50;
 
 async function fetchDescriptionSnippet(
   listing: LinkedInJobListing
@@ -82,18 +93,30 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+function resolveSearchWorkType(
+  formWorkType: LinkedInWorkType,
+  preferences: JobSearchPreferences
+): LinkedInWorkType {
+  if (formWorkType !== "any") return formWorkType;
+  if (preferences.remote_only) return "remote";
+  return "any";
+}
+
 export async function discoverMatchingLinkedInJobs(
   profile: Profile,
   resume: Resume,
   input: DiscoverJobsInput,
   preferences: JobSearchPreferences,
-  appliedApplications: AppliedApplicationRow[] = []
+  appliedApplications: AppliedApplicationRow[] = [],
+  dismissedJobs: JobSearchDismissalRow[] = []
 ): Promise<{
   listingsFound: number;
+  candidatesChecked: number;
   hiddenByApplied: number;
-  scannedForPreferences: number;
+  hiddenByNotConsider: number;
   hiddenByPreferences: number;
-  /** Excluded jobs with reasons (not shown in UI; for logging / future debug) */
+  searchQueryReason: string;
+  jobsShown: number;
   preferenceExclusions: Array<{
     linkedInJobId: string;
     title: string;
@@ -101,65 +124,142 @@ export async function discoverMatchingLinkedInJobs(
   }>;
   jobs: DiscoveredJobMatch[];
 }> {
-  const limit = Math.min(Math.max(input.limit ?? 15, 5), 25);
+  const targetVisibleJobs = Math.min(Math.max(input.limit ?? 10, 5), 25);
+  /** Collect extra hard-pass jobs so enough survive AI + min match % */
+  const targetHardPassJobs = Math.min(targetVisibleJobs * 2, 25);
   const minMatchScore = input.minMatchScore ?? 55;
+  const formWorkType = input.workType ?? "any";
+  const searchWorkType = resolveSearchWorkType(formWorkType, preferences);
 
-  const listings = await searchLinkedInJobs({
-    keywords: input.keywords,
+  const queryPlan = buildJobSearchQueryFromPreferences({
+    keyword: input.keywords,
     location: input.location,
-    postedWithin: input.postedWithin ?? "any",
-    workType: input.workType ?? "any",
-    start: 0,
+    workType: searchWorkType,
+    targetJobTitles: profile.target_job_titles ?? [],
+    preferences,
   });
 
-  const { remaining: listingsToProcess, hiddenCount: hiddenByApplied } =
-    filterListingsExcludingApplied(listings, appliedApplications);
+  const seenJobIds = new Set<string>();
+  const validJobs: Array<{
+    listing: LinkedInJobListing;
+    description: string;
+  }> = [];
 
-  const jobsWithDescriptions = await mapWithConcurrency(
-    listingsToProcess,
-    4,
-    async (listing) => {
-      const description = await fetchDescriptionSnippet(listing);
-      return { listing, description };
+  let candidatesChecked = 0;
+  let hiddenByApplied = 0;
+  let hiddenByNotConsider = 0;
+  let hiddenByPreferences = 0;
+  let listingsFound = 0;
+  const preferenceExclusions: Array<{
+    linkedInJobId: string;
+    title: string;
+    exclusionReasons: string[];
+  }> = [];
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    if (validJobs.length >= targetHardPassJobs) break;
+    if (candidatesChecked >= MAX_CANDIDATES_TO_INSPECT) break;
+
+    const keyword =
+      queryPlan.searchKeywords[page % queryPlan.searchKeywords.length] ??
+      input.keywords.trim();
+    const start = page * LINKEDIN_PAGE_SIZE;
+
+    const batch = await searchLinkedInJobs({
+      keywords: keyword,
+      location: queryPlan.searchLocation ?? input.location,
+      postedWithin: input.postedWithin ?? "any",
+      workType: searchWorkType,
+      start,
+    });
+
+    listingsFound += batch.length;
+
+    const newListings: LinkedInJobListing[] = [];
+    for (const listing of batch) {
+      if (seenJobIds.has(listing.linkedInJobId)) continue;
+      seenJobIds.add(listing.linkedInJobId);
+      newListings.push(listing);
+      candidatesChecked++;
+      if (candidatesChecked >= MAX_CANDIDATES_TO_INSPECT) break;
     }
-  );
 
-  const forPreferenceFilter: JobForPreferenceFilter[] = jobsWithDescriptions.map(
-    ({ listing, description }) => ({
-      id: listing.linkedInJobId,
-      title: listing.title,
-      company: listing.company,
-      location: listing.location,
-      description,
-    })
-  );
+    const { remaining: afterApplied, hiddenCount: appliedHidden } =
+      filterListingsExcludingApplied(newListings, appliedApplications);
+    hiddenByApplied += appliedHidden;
 
-  const { passed, filtered, hiddenCount } = partitionJobsByPreferences(
-    forPreferenceFilter,
-    preferences
-  );
+    const { remaining: afterDismissed, hiddenCount: dismissedHidden } =
+      filterListingsExcludingDismissed(afterApplied, dismissedJobs);
+    hiddenByNotConsider += dismissedHidden;
 
-  const preferenceExclusions = filtered
-    .slice(0, 25)
-    .map((r: JobPreferenceFilterResult) => ({
-      linkedInJobId: r.job.id,
-      title: r.job.title,
-      exclusionReasons: r.exclusionReasons,
-    }));
+    const afterQuickExclusion: LinkedInJobListing[] = [];
+    for (const listing of afterDismissed) {
+      if (
+        listingFailsQuickExclusion(listing, queryPlan.excludedTerms)
+      ) {
+        hiddenByPreferences++;
+        if (preferenceExclusions.length < 25) {
+          preferenceExclusions.push({
+            linkedInJobId: listing.linkedInJobId,
+            title: listing.title,
+            exclusionReasons: ["Quick exclusion: title/company/location"],
+          });
+        }
+        continue;
+      }
+      afterQuickExclusion.push(listing);
+    }
 
-  const listingById = new Map(
-    listingsToProcess.map((l) => [l.linkedInJobId, l] as const)
-  );
+    if (afterQuickExclusion.length === 0) continue;
 
-  const candidates = passed.slice(0, limit).map((job) => {
-    const listing = listingById.get(job.id)!;
-    return {
-      listing,
-      description: job.description,
-    };
-  });
+    const jobsWithDescriptions = await mapWithConcurrency(
+      afterQuickExclusion,
+      4,
+      async (listing) => {
+        const description = await fetchDescriptionSnippet(listing);
+        return { listing, description };
+      }
+    );
 
-  const forScoring: JobForDiscoveryScore[] = candidates.map(
+    const forPreferenceFilter: JobForPreferenceFilter[] =
+      jobsWithDescriptions.map(({ listing, description }) => ({
+        id: listing.linkedInJobId,
+        title: listing.title,
+        company: listing.company,
+        location: listing.location,
+        description,
+      }));
+
+    const { passed, filtered, hiddenCount } = partitionJobsByPreferences(
+      forPreferenceFilter,
+      preferences
+    );
+    hiddenByPreferences += hiddenCount;
+
+    for (const result of filtered) {
+      if (preferenceExclusions.length >= 25) break;
+      preferenceExclusions.push({
+        linkedInJobId: result.job.id,
+        title: result.job.title,
+        exclusionReasons: result.exclusionReasons,
+      });
+    }
+
+    const listingById = new Map(
+      jobsWithDescriptions.map(
+        ({ listing }) => [listing.linkedInJobId, listing] as const
+      )
+    );
+
+    for (const job of passed) {
+      if (validJobs.length >= targetHardPassJobs) break;
+      const listing = listingById.get(job.id);
+      if (!listing) continue;
+      validJobs.push({ listing, description: job.description });
+    }
+  }
+
+  const forScoring: JobForDiscoveryScore[] = validJobs.map(
     ({ listing, description }) => ({
       id: listing.linkedInJobId,
       title: listing.title,
@@ -204,24 +304,33 @@ export async function discoverMatchingLinkedInJobs(
 
     const scoreById = new Map(scores.map((s) => [s.jobId, s]));
 
-    jobs = candidates
+    jobs = validJobs
       .map(({ listing }) => {
         const scored = scoreById.get(listing.linkedInJobId);
         return {
-          ...listing,
+          linkedInJobId: listing.linkedInJobId,
+          title: listing.title,
+          company: listing.company,
+          location: listing.location,
+          jobUrl: listing.jobUrl,
+          postedText: listing.postedText,
           matchScore: scored?.matchScore ?? 0,
           matchNote: scored?.note ?? "",
         };
       })
       .filter((j) => j.matchScore >= minMatchScore)
-      .sort((a, b) => b.matchScore - a.matchScore);
+      .sort((a, b) => b.matchScore - a.matchScore)
+      .slice(0, targetVisibleJobs);
   }
 
   return {
-    listingsFound: listings.length,
+    listingsFound,
+    candidatesChecked,
     hiddenByApplied,
-    scannedForPreferences: forPreferenceFilter.length,
-    hiddenByPreferences: hiddenCount,
+    hiddenByNotConsider,
+    hiddenByPreferences,
+    searchQueryReason: queryPlan.reason,
+    jobsShown: jobs.length,
     preferenceExclusions,
     jobs,
   };

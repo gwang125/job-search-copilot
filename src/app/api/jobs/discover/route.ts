@@ -26,20 +26,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Keywords are required" }, { status: 400 });
   }
 
-  const [{ data: profile }, { data: resumes }, preferences, { data: applications }] =
-    await Promise.all([
-      auth.supabase.from("profiles").select("*").eq("id", auth.user.id).single(),
-      auth.supabase
-        .from("resumes")
-        .select("*")
-        .eq("user_id", auth.user.id)
-        .order("is_primary", { ascending: false }),
-      getJobSearchPreferences(auth.supabase, auth.user.id),
-      auth.supabase
-        .from("applications")
-        .select("id, status, job:jobs(company, job_title, job_url)")
-        .eq("user_id", auth.user.id),
-    ]);
+  const [
+    { data: profile },
+    { data: resumes },
+    preferences,
+    { data: applications },
+    { data: dismissals },
+  ] = await Promise.all([
+    auth.supabase.from("profiles").select("*").eq("id", auth.user.id).single(),
+    auth.supabase
+      .from("resumes")
+      .select("*")
+      .eq("user_id", auth.user.id)
+      .order("is_primary", { ascending: false }),
+    getJobSearchPreferences(auth.supabase, auth.user.id),
+    auth.supabase
+      .from("applications")
+      .select("id, status, job:jobs(company, job_title, job_url)")
+      .eq("user_id", auth.user.id),
+    auth.supabase
+      .from("job_search_dismissals")
+      .select("linkedin_job_id, job_url, job_title, company")
+      .eq("user_id", auth.user.id),
+  ]);
 
   if (!profile) {
     return NextResponse.json({ error: "Profile not found" }, { status: 400 });
@@ -75,15 +84,19 @@ export async function POST(request: Request) {
         limit,
       },
       preferences,
-      applications ?? []
+      applications ?? [],
+      dismissals ?? []
     );
 
     return NextResponse.json({
       resumeUsed: { id: resume.id, name: resume.name },
       listingsFound: result.listingsFound,
+      candidatesChecked: result.candidatesChecked,
       hiddenByApplied: result.hiddenByApplied,
-      scannedForPreferences: result.scannedForPreferences,
+      hiddenByNotConsider: result.hiddenByNotConsider,
       hiddenByPreferences: result.hiddenByPreferences,
+      jobsShown: result.jobsShown,
+      searchQueryReason: result.searchQueryReason,
       preferenceExclusions: result.preferenceExclusions,
       jobs: result.jobs,
     });
