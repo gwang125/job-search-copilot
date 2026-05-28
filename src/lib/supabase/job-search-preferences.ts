@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { JobSearchPreferences } from "@/types/database";
+import type { JobSearchKeywordEntry, JobSearchPreferences, Profile } from "@/types/database";
 
 export const DEFAULT_JOB_SEARCH_PREFERENCES: Omit<
   JobSearchPreferences,
@@ -16,6 +16,7 @@ export const DEFAULT_JOB_SEARCH_PREFERENCES: Omit<
   hybrid_allowed: true,
   preferred_locations: [],
   blocked_keywords: [],
+  search_keywords: [],
 };
 
 export function normalizeJobSearchPreferencesRow(
@@ -56,6 +57,7 @@ export function normalizeJobSearchPreferencesRow(
     hybrid_allowed: row.hybrid_allowed === false ? false : true,
     preferred_locations: stringArray(row.preferred_locations),
     blocked_keywords: stringArray(row.blocked_keywords),
+    search_keywords: parseSearchKeywords(row.search_keywords),
     created_at: String(row.created_at ?? ""),
     updated_at: String(row.updated_at ?? ""),
   };
@@ -66,6 +68,76 @@ function stringArray(value: unknown): string[] {
   return value
     .map((v) => (typeof v === "string" ? v.trim() : ""))
     .filter(Boolean);
+}
+
+function newSearchKeywordId(): string {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `kw-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function parseSearchKeywords(value: unknown): JobSearchKeywordEntry[] {
+  if (!Array.isArray(value)) return [];
+  const out: JobSearchKeywordEntry[] = [];
+  const seen = new Set<string>();
+
+  for (const item of value) {
+    let keyword = "";
+    let isActive = true;
+    let id = newSearchKeywordId();
+
+    if (typeof item === "string") {
+      keyword = item.trim();
+    } else if (item && typeof item === "object") {
+      const row = item as Record<string, unknown>;
+      keyword = typeof row.keyword === "string" ? row.keyword.trim() : "";
+      isActive = row.is_active !== false;
+      if (typeof row.id === "string" && row.id.trim()) {
+        id = row.id.trim();
+      }
+    }
+
+    if (!keyword) continue;
+    const key = keyword.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ id, keyword, is_active: isActive });
+  }
+
+  return out;
+}
+
+export function createSearchKeywordEntry(
+  keyword: string,
+  isActive = true
+): JobSearchKeywordEntry {
+  return {
+    id: newSearchKeywordId(),
+    keyword: keyword.trim(),
+    is_active: isActive,
+  };
+}
+
+export function getActiveSearchKeywords(
+  prefs: JobSearchPreferences,
+  profile?: Pick<Profile, "target_job_titles"> | null
+): string[] {
+  const fromPrefs = prefs.search_keywords
+    .filter((entry) => entry.is_active && entry.keyword.trim())
+    .map((entry) => entry.keyword.trim());
+
+  if (fromPrefs.length > 0) return fromPrefs;
+
+  return (profile?.target_job_titles ?? [])
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+export function normalizeSearchKeywordsForSave(
+  entries: JobSearchKeywordEntry[]
+): JobSearchKeywordEntry[] {
+  return parseSearchKeywords(entries);
 }
 
 export async function getJobSearchPreferences(
@@ -109,6 +181,7 @@ export function preferencesPayloadForSave(
     hybrid_allowed: prefs.hybrid_allowed,
     preferred_locations: prefs.preferred_locations,
     blocked_keywords: prefs.blocked_keywords,
+    search_keywords: normalizeSearchKeywordsForSave(prefs.search_keywords),
   };
 }
 

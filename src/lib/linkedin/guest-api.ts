@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import type { ParsedJob } from "@/types/database";
 import { extractLinkedInJobDescriptionFromCheerio } from "@/lib/linkedin/extract-job-description";
+import { throwLinkedInHttpError, isLinkedInHttpError } from "@/lib/linkedin/linkedin-http-errors";
 
 const GUEST_JOB_API =
   "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting";
@@ -21,7 +22,9 @@ export async function parseLinkedInJobViaGuestApi(
       signal: AbortSignal.timeout(15000),
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      throwLinkedInHttpError("job_posting", response);
+    }
 
     const html = await response.text();
     const $ = cheerio.load(html);
@@ -54,7 +57,8 @@ export async function parseLinkedInJobViaGuestApi(
       location: location || null,
       jobDescription,
     };
-  } catch {
+  } catch (error) {
+    if (isLinkedInHttpError(error)) throw error;
     return null;
   }
 }
@@ -73,7 +77,9 @@ export async function parseLinkedInJobViaViewPage(
       }
     );
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      throwLinkedInHttpError("job_posting", response);
+    }
 
     const html = await response.text();
     const $ = cheerio.load(html);
@@ -105,7 +111,8 @@ export async function parseLinkedInJobViaViewPage(
       location: location || null,
       jobDescription,
     };
-  } catch {
+  } catch (error) {
+    if (isLinkedInHttpError(error)) throw error;
     return null;
   }
 }

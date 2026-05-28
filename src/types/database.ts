@@ -53,8 +53,17 @@ export interface JobSearchPreferences {
   hybrid_allowed: boolean;
   preferred_locations: string[];
   blocked_keywords: string[];
+  /** Find Jobs LinkedIn search phrases — toggle is_active to include in search */
+  search_keywords: JobSearchKeywordEntry[];
   created_at: string;
   updated_at: string;
+}
+
+export interface JobSearchKeywordEntry {
+  /** Stable id for React keys (stored in search_keywords jsonb) */
+  id: string;
+  keyword: string;
+  is_active: boolean;
 }
 
 export interface Profile {

@@ -12,6 +12,7 @@
     "test:search-query": "npx tsx --test src/lib/jobs/build-job-search-query.test.ts",
     "test:dismissed": "npx tsx --test src/lib/jobs/dismissed-job-exclusions.test.ts",
     "test:linkedin-jd": "npx tsx --test src/lib/linkedin/extract-job-description.test.ts",
+    "test:linkedin-errors": "npx tsx --test src/lib/linkedin/linkedin-http-errors.test.ts",
     "verify:css": "node scripts/verify-tailwind.mjs",
     "build:verify": "npm run build && npm run verify:css"
   },

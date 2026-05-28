@@ -9,15 +9,21 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { Alert } from "@/components/ui/alert";
 import { FloatingAlert } from "@/components/ui/floating-alert";
 import { FormInput } from "@/components/ui/form-input";
 import { SectionHeader } from "@/components/layout/section-header";
 import { ResumeProfileImport } from "@/components/profile/resume-profile-import";
 import { ProjectFields } from "@/components/profile/project-fields";
 import { JobSearchPreferencesFields } from "@/components/profile/job-search-preferences-fields";
-import { preferencesPayloadForSave } from "@/lib/supabase/job-search-preferences";
+import { JobSearchKeywordsFields } from "@/components/profile/job-search-keywords-fields";
+import {
+  createSearchKeywordEntry,
+  preferencesPayloadForSave,
+} from "@/lib/supabase/job-search-preferences";
 import type {
   EducationEntry,
+  JobSearchKeywordEntry,
   JobSearchPreferences,
   ParsedProfileFromResume,
   Profile,
@@ -114,7 +120,17 @@ export function ProfileForm({
   const [jobSearchPreferences, setJobSearchPreferences] =
     useState<JobSearchPreferences>(initialPreferences);
   const [loading, setLoading] = useState(false);
+  const [keywordsSaving, setKeywordsSaving] = useState(false);
+  const [filtersSaving, setFiltersSaving] = useState(false);
   const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [keywordsMessage, setKeywordsMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [filtersMessage, setFiltersMessage] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
@@ -134,8 +150,94 @@ export function ProfileForm({
   }, [profile]);
 
   useEffect(() => {
+    if (initialPreferences.search_keywords.length > 0) {
+      setJobSearchPreferences(initialPreferences);
+      return;
+    }
+    if (profile?.target_job_titles?.length) {
+      setJobSearchPreferences({
+        ...initialPreferences,
+        search_keywords: profile.target_job_titles.map((title) =>
+          createSearchKeywordEntry(title, true)
+        ),
+      });
+      return;
+    }
     setJobSearchPreferences(initialPreferences);
-  }, [initialPreferences]);
+  }, [initialPreferences, profile?.target_job_titles]);
+
+  function buildPreferencesPayload() {
+    return preferencesPayloadForSave(userId, {
+      exclude_us_citizenship_required:
+        jobSearchPreferences.exclude_us_citizenship_required,
+      exclude_security_clearance_required:
+        jobSearchPreferences.exclude_security_clearance_required,
+      exclude_no_visa_sponsorship:
+        jobSearchPreferences.exclude_no_visa_sponsorship,
+      exclude_green_card_required:
+        jobSearchPreferences.exclude_green_card_required,
+      max_years_experience: jobSearchPreferences.max_years_experience,
+      exclude_phd_required: jobSearchPreferences.exclude_phd_required,
+      excluded_certifications: jobSearchPreferences.excluded_certifications,
+      remote_only: jobSearchPreferences.remote_only,
+      hybrid_allowed: jobSearchPreferences.hybrid_allowed,
+      preferred_locations: jobSearchPreferences.preferred_locations,
+      blocked_keywords: jobSearchPreferences.blocked_keywords,
+      search_keywords: jobSearchPreferences.search_keywords.filter((k) =>
+        k.keyword.trim()
+      ),
+    });
+  }
+
+  async function persistJobSearchPreferences(): Promise<string | null> {
+    const supabase = createClient();
+    const { error: prefsError } = await supabase
+      .from("job_search_preferences")
+      .upsert(buildPreferencesPayload(), { onConflict: "user_id" });
+
+    if (prefsError) {
+      return prefsError.message;
+    }
+    return null;
+  }
+
+  async function handleSaveKeywords() {
+    setKeywordsSaving(true);
+    setKeywordsMessage(null);
+    const errorText = await persistJobSearchPreferences();
+    setKeywordsSaving(false);
+    if (errorText) {
+      setKeywordsMessage({
+        type: "error",
+        text: `Could not save keywords: ${errorText}. Run migrations 006 and 008 in Supabase if needed.`,
+      });
+      return;
+    }
+    setKeywordsMessage({
+      type: "success",
+      text: "Search keywords saved. Find jobs will use your active keywords.",
+    });
+    router.refresh();
+  }
+
+  async function handleSaveFilters() {
+    setFiltersSaving(true);
+    setFiltersMessage(null);
+    const errorText = await persistJobSearchPreferences();
+    setFiltersSaving(false);
+    if (errorText) {
+      setFiltersMessage({
+        type: "error",
+        text: `Could not save filters: ${errorText}. Run migrations 006 and 008 in Supabase if needed.`,
+      });
+      return;
+    }
+    setFiltersMessage({
+      type: "success",
+      text: "Job search filters saved. Find jobs will apply these hard requirements.",
+    });
+    router.refresh();
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -206,41 +308,23 @@ export function ProfileForm({
       return;
     }
 
-    const prefsPayload = preferencesPayloadForSave(userId, {
-      exclude_us_citizenship_required:
-        jobSearchPreferences.exclude_us_citizenship_required,
-      exclude_security_clearance_required:
-        jobSearchPreferences.exclude_security_clearance_required,
-      exclude_no_visa_sponsorship:
-        jobSearchPreferences.exclude_no_visa_sponsorship,
-      exclude_green_card_required:
-        jobSearchPreferences.exclude_green_card_required,
-      max_years_experience: jobSearchPreferences.max_years_experience,
-      exclude_phd_required: jobSearchPreferences.exclude_phd_required,
-      excluded_certifications: jobSearchPreferences.excluded_certifications,
-      remote_only: jobSearchPreferences.remote_only,
-      hybrid_allowed: jobSearchPreferences.hybrid_allowed,
-      preferred_locations: jobSearchPreferences.preferred_locations,
-      blocked_keywords: jobSearchPreferences.blocked_keywords,
-    });
-
-    const { error: prefsError } = await supabase
-      .from("job_search_preferences")
-      .upsert(prefsPayload, { onConflict: "user_id" });
+    const prefsError = await persistJobSearchPreferences();
 
     setLoading(false);
 
     if (prefsError) {
       setMessage({
         type: "error",
-        text: `Profile saved, but job filters failed: ${prefsError.message}. Run migration 006_job_search_preferences.sql in Supabase.`,
+        text: `Profile saved, but job search settings failed: ${prefsError}. Run migrations 006 and 008 in Supabase if needed.`,
       });
       return;
     }
 
+    setKeywordsMessage(null);
+    setFiltersMessage(null);
     setMessage({
       type: "success",
-      text: "Profile and job search filters saved successfully.",
+      text: "Profile and job search settings saved successfully.",
     });
     router.refresh();
   }
@@ -400,9 +484,76 @@ export function ProfileForm({
 
       <Card>
         <SectionHeader
+          title="Find jobs search keywords"
+          description="LinkedIn search phrases for Find jobs. Toggle active to include or skip each keyword."
+          action={
+            <PrimaryButton
+              type="button"
+              size="sm"
+              loading={keywordsSaving}
+              disabled={filtersSaving || loading}
+              onClick={() => void handleSaveKeywords()}
+            >
+              Save keywords
+            </PrimaryButton>
+          }
+        />
+        {keywordsMessage && (
+          <Alert variant={keywordsMessage.type} className="mb-4">
+            {keywordsMessage.text}
+          </Alert>
+        )}
+        <JobSearchKeywordsFields
+          keywords={jobSearchPreferences.search_keywords}
+          onChange={(search_keywords: JobSearchKeywordEntry[]) =>
+            setJobSearchPreferences((prev) => ({ ...prev, search_keywords }))
+          }
+          targetTitlesAvailable={targetTitles
+            .split(",")
+            .map((s) => s.trim())
+            .some(Boolean)}
+          onImportFromTargetTitles={() => {
+            const titles = targetTitles
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean);
+            const existing = new Set(
+              jobSearchPreferences.search_keywords.map((k) =>
+                k.keyword.toLowerCase()
+              )
+            );
+            const imported = titles
+              .filter((t) => !existing.has(t.toLowerCase()))
+              .map((keyword) => createSearchKeywordEntry(keyword, true));
+            setJobSearchPreferences((prev) => ({
+              ...prev,
+              search_keywords: [...prev.search_keywords, ...imported],
+            }));
+          }}
+        />
+      </Card>
+
+      <Card>
+        <SectionHeader
           title="Job search filters"
           description="Hard requirements — jobs that violate these rules are removed in Find jobs before AI scoring."
+          action={
+            <PrimaryButton
+              type="button"
+              size="sm"
+              loading={filtersSaving}
+              disabled={keywordsSaving || loading}
+              onClick={() => void handleSaveFilters()}
+            >
+              Save filters
+            </PrimaryButton>
+          }
         />
+        {filtersMessage && (
+          <Alert variant={filtersMessage.type} className="mb-4">
+            {filtersMessage.text}
+          </Alert>
+        )}
         <JobSearchPreferencesFields
           preferences={jobSearchPreferences}
           onChange={setJobSearchPreferences}

@@ -1,5 +1,8 @@
 import type { Profile, Resume } from "@/types/database";
 
+/** Max JD chars sent to OpenAI per job during discovery (full text used for hard filters) */
+export const DISCOVERY_SCORE_JD_MAX_LENGTH = 8000;
+
 export function buildProfileContext(profile: Profile): string {
   return JSON.stringify(
     {
@@ -101,7 +104,7 @@ Title: ${j.title}
 Company: ${j.company ?? "Unknown"}
 Location: ${j.location ?? "Unknown"}
 Description:
-${j.description.slice(0, 2500)}`
+${j.description.slice(0, DISCOVERY_SCORE_JD_MAX_LENGTH)}`
     )
     .join("\n\n");
 

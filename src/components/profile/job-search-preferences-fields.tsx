@@ -26,23 +26,26 @@ function CheckboxRow({
   label,
   description,
   checked,
+  disabled = false,
   onChange,
 }: {
   id: string;
   label: string;
   description?: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (checked: boolean) => void;
 }) {
   return (
     <label
       htmlFor={id}
-      className="flex cursor-pointer gap-3 rounded-lg border border-zinc-200/80 bg-zinc-50/50 px-4 py-3"
+      className="flex cursor-pointer gap-3 rounded-lg border border-zinc-200/80 bg-zinc-50/50 px-4 py-3 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
     >
       <input
         id={id}
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
         className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
       />

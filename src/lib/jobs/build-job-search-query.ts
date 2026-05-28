@@ -137,6 +137,7 @@ export function buildJobSearchQueryFromPreferences(
 
   const searchKeywords: string[] = [];
   if (modifiers.length > 0) {
+    searchKeywords.push(baseRole);
     for (const mod of modifiers.slice(0, 5)) {
       searchKeywords.push(`${baseRole} ${mod}`);
     }
@@ -162,7 +163,7 @@ export function buildJobSearchQueryFromPreferences(
   const reasons: string[] = [];
   if (modifiers.length > 0) {
     reasons.push(
-      `Targeting ${modifiers.slice(0, 3).join(", ")} variants of "${baseRole}"`
+      `Searching "${baseRole}" plus ${modifiers.slice(0, 3).join(", ")} variants`
     );
   } else {
     reasons.push(`Searching for "${baseRole}"`);
@@ -179,6 +180,37 @@ export function buildJobSearchQueryFromPreferences(
     searchModifiers: modifiers,
     excludedTerms,
     reason: reasons.join(". ") + ".",
+  };
+}
+
+/** Merge query plans for multiple active base keywords (Find Jobs). */
+export function buildCombinedSearchQueryPlan(
+  activeKeywords: string[],
+  input: Omit<BuildJobSearchQueryInput, "keyword">
+): JobSearchQueryPlan {
+  if (activeKeywords.length === 0) {
+    return buildJobSearchQueryFromPreferences({ ...input, keyword: "" });
+  }
+
+  const mergedKeywords: string[] = [];
+  let searchLocation: string | undefined;
+  let excludedTerms: string[] = [];
+  const reasons: string[] = [];
+
+  for (const keyword of activeKeywords) {
+    const plan = buildJobSearchQueryFromPreferences({ ...input, keyword });
+    mergedKeywords.push(...plan.searchKeywords);
+    searchLocation = searchLocation ?? plan.searchLocation;
+    excludedTerms = uniqueNonEmpty([...excludedTerms, ...plan.excludedTerms]);
+    reasons.push(`${keyword} (${plan.searchKeywords.length} queries)`);
+  }
+
+  return {
+    searchKeywords: uniqueNonEmpty(mergedKeywords),
+    searchLocation,
+    searchModifiers: [],
+    excludedTerms,
+    reason: `Active keywords: ${reasons.join("; ")}.`,
   };
 }
 

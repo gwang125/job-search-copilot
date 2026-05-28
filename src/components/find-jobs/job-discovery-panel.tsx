@@ -18,11 +18,11 @@ import {
   saveFindJobsSession,
 } from "@/lib/find-jobs-session-cache";
 import {
+  CheckCircle2,
   Compass,
   ExternalLink,
   EyeOff,
   Loader2,
-  ScanSearch,
   Star,
   X,
 } from "lucide-react";
@@ -30,7 +30,7 @@ import {
 interface JobDiscoveryPanelProps {
   userId: string;
   resumes: Resume[];
-  defaultKeywords?: string;
+  activeSearchKeywords: string[];
   defaultLocation?: string;
 }
 
@@ -40,7 +40,7 @@ const selectClassName =
 export function JobDiscoveryPanel({
   userId,
   resumes,
-  defaultKeywords = "",
+  activeSearchKeywords,
   defaultLocation = "",
 }: JobDiscoveryPanelProps) {
   const primaryResume = useMemo(
@@ -48,7 +48,6 @@ export function JobDiscoveryPanel({
     [resumes]
   );
 
-  const [keywords, setKeywords] = useState(defaultKeywords);
   const [location, setLocation] = useState(defaultLocation);
   const [resumeId, setResumeId] = useState(primaryResume?.id ?? "");
   const [postedWithin, setPostedWithin] = useState<LinkedInPostedWithin>("any");
@@ -71,6 +70,10 @@ export function JobDiscoveryPanel({
     searchQueryReason?: string;
   } | null>(null);
   const [dismissingId, setDismissingId] = useState<string | null>(null);
+  const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [appliedJobIds, setAppliedJobIds] = useState<Set<string>>(
+    () => new Set()
+  );
 
   const skipNextSave = useRef(false);
 
@@ -78,7 +81,6 @@ export function JobDiscoveryPanel({
     const cached = loadFindJobsSession(userId);
     if (cached) {
       skipNextSave.current = true;
-      setKeywords(cached.filters.keywords);
       setLocation(cached.filters.location);
       setResumeId(cached.filters.resumeId);
       setPostedWithin(cached.filters.postedWithin);
@@ -101,11 +103,8 @@ export function JobDiscoveryPanel({
       return;
     }
 
-    const savedAt = new Date().toISOString();
-    saveFindJobsSession(userId, {
-      savedAt,
+    const savedAt = saveFindJobsSession(userId, {
       filters: {
-        keywords,
         location,
         resumeId,
         postedWithin,
@@ -114,14 +113,16 @@ export function JobDiscoveryPanel({
         limit,
       },
       jobs,
-      meta,
+      meta: {
+        ...meta,
+        activeKeywords: activeSearchKeywords,
+      },
     });
-    setSessionSavedAt(savedAt);
+    if (savedAt) setSessionSavedAt(savedAt);
   }, [
     sessionReady,
     loading,
     userId,
-    keywords,
     location,
     resumeId,
     postedWithin,
@@ -130,6 +131,7 @@ export function JobDiscoveryPanel({
     limit,
     jobs,
     meta,
+    activeSearchKeywords,
   ]);
 
   function clearSavedResults() {
@@ -139,6 +141,43 @@ export function JobDiscoveryPanel({
     setMeta(null);
     setSessionSavedAt(null);
     setError(null);
+  }
+
+  async function markAsApplied(job: DiscoveredJobMatch) {
+    setApplyingId(job.linkedInJobId);
+    setError(null);
+    try {
+      const res = await fetch("/api/jobs/mark-applied", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobUrl: job.jobUrl,
+          jobTitle: job.title,
+          company: job.company,
+          location: job.location,
+          matchScore: job.matchScore,
+          resumeId: resumeId || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error ?? "Could not mark as applied");
+      }
+      setAppliedJobIds((prev) => new Set(prev).add(job.linkedInJobId));
+      setJobs((prev) => prev.filter((j) => j.linkedInJobId !== job.linkedInJobId));
+      setMeta((prev) =>
+        prev
+          ? {
+              ...prev,
+              hiddenByApplied: prev.hiddenByApplied + 1,
+            }
+          : prev
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not mark as applied");
+    } finally {
+      setApplyingId(null);
+    }
   }
 
   async function markNotConsider(job: DiscoveredJobMatch) {
@@ -189,7 +228,6 @@ export function JobDiscoveryPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          keywords: keywords.trim(),
           location: location.trim() || undefined,
           resumeId: resumeId || undefined,
           postedWithin,
@@ -242,7 +280,7 @@ export function JobDiscoveryPanel({
         requirements, before AI scoring. Your last search stays in this tab until you
         search again.{" "}
         <Link href="/profile" className="font-medium text-indigo-600 hover:underline">
-          Edit hard requirements
+          Edit search keywords &amp; filters
         </Link>
       </Alert>
 
@@ -272,14 +310,31 @@ export function JobDiscoveryPanel({
         <form onSubmit={runSearch} className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="keywords">Keywords</Label>
-              <Input
-                id="keywords"
-                placeholder="e.g. software engineer react"
-                value={keywords}
-                onChange={(e) => setKeywords(e.target.value)}
-                required
-              />
+              <Label>Search keywords</Label>
+              <p className="text-xs text-zinc-500">
+                From your Profile — only active keywords are searched.{" "}
+                <Link
+                  href="/profile"
+                  className="font-medium text-indigo-600 hover:underline"
+                >
+                  Edit on Profile
+                </Link>
+              </p>
+              {activeSearchKeywords.length > 0 ? (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {activeSearchKeywords.map((kw) => (
+                    <Badge key={kw}>{kw}</Badge>
+                  ))}
+                </div>
+              ) : (
+                <Alert variant="warning" className="mt-1">
+                  No active search keywords. Add keywords on your{" "}
+                  <Link href="/profile" className="font-medium underline">
+                    Profile
+                  </Link>{" "}
+                  and save, then return here.
+                </Alert>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="location">Location (optional)</Label>
@@ -360,7 +415,10 @@ export function JobDiscoveryPanel({
             </div>
           </div>
 
-          <PrimaryButton type="submit" disabled={loading || !keywords.trim()}>
+          <PrimaryButton
+            type="submit"
+            disabled={loading || activeSearchKeywords.length === 0}
+          >
             {loading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -376,7 +434,11 @@ export function JobDiscoveryPanel({
         </form>
       </Card>
 
-      {error && <Alert variant="error">{error}</Alert>}
+      {error && (
+        <Alert variant="error" className="whitespace-pre-line">
+          {error}
+        </Alert>
+      )}
 
       {meta && !loading && (
         <p className="text-sm text-zinc-600">
@@ -474,14 +536,28 @@ export function JobDiscoveryPanel({
                             LinkedIn
                           </Button>
                         </a>
-                        <Link
-                          href={`/job-analyzer?jobUrl=${encodeURIComponent(job.jobUrl)}&returnTo=find-jobs`}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={
+                            applyingId === job.linkedInJobId ||
+                            appliedJobIds.has(job.linkedInJobId)
+                          }
+                          onClick={() => markAsApplied(job)}
+                          title="Save to Applications as applied"
                         >
-                          <Button type="button" variant="ghost" size="sm">
-                            <ScanSearch className="h-3.5 w-3.5" />
-                            Analyze
-                          </Button>
-                        </Link>
+                          {applyingId === job.linkedInJobId ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : appliedJobIds.has(job.linkedInJobId) ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                          ) : (
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          )}
+                          {appliedJobIds.has(job.linkedInJobId)
+                            ? "Applied"
+                            : "Mark applied"}
+                        </Button>
                         <Button
                           type="button"
                           variant="ghost"

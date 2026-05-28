@@ -1,4 +1,7 @@
 import * as cheerio from "cheerio";
+import type { Element } from "domhandler";
+import { throwLinkedInHttpError } from "@/lib/linkedin/linkedin-http-errors";
+import { throttleLinkedInRequest } from "@/lib/linkedin/rate-limit";
 import { extractLinkedInJobId } from "@/lib/linkedin/url";
 
 const SEARCH_API =
@@ -64,7 +67,7 @@ function normalizeJobUrl(href: string): string {
 
 function parseListingFromCard(
   $: cheerio.CheerioAPI,
-  card: cheerio.Element
+  card: Element
 ): LinkedInJobListing | null {
   const $card = $(card);
   const link =
@@ -129,15 +132,15 @@ export async function searchLinkedInJobs(
   const fWt = workTypeParam(params.workType ?? "any");
   if (fWt) query.set("f_WT", fWt);
 
+  await throttleLinkedInRequest();
+
   const response = await fetch(`${SEARCH_API}?${query.toString()}`, {
     headers: BROWSER_HEADERS,
     signal: AbortSignal.timeout(20000),
   });
 
   if (!response.ok) {
-    throw new Error(
-      `LinkedIn job search failed (${response.status}). Try different keywords or location.`
-    );
+    throwLinkedInHttpError("job_search", response);
   }
 
   const html = await response.text();

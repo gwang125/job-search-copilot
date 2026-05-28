@@ -1,19 +1,18 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/api-auth";
 import { discoverMatchingLinkedInJobs } from "@/lib/jobs/discover-jobs";
-import { getJobSearchPreferences } from "@/lib/supabase/job-search-preferences";
+import { getJobSearchPreferences, getActiveSearchKeywords } from "@/lib/supabase/job-search-preferences";
 import type { LinkedInPostedWithin, LinkedInWorkType } from "@/lib/linkedin/search-jobs";
 import type { Resume } from "@/types/database";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 180;
 
 export async function POST(request: Request) {
   const auth = await requireUser();
   if (auth.error) return auth.error;
 
   const body = await request.json();
-  const keywords = (body.keywords as string | undefined)?.trim();
   const location = (body.location as string | undefined)?.trim();
   const resumeId = body.resumeId as string | undefined;
   const postedWithin = (body.postedWithin as LinkedInPostedWithin) ?? "any";
@@ -21,10 +20,6 @@ export async function POST(request: Request) {
   const minMatchScore =
     typeof body.minMatchScore === "number" ? body.minMatchScore : 55;
   const limit = typeof body.limit === "number" ? body.limit : 15;
-
-  if (!keywords) {
-    return NextResponse.json({ error: "Keywords are required" }, { status: 400 });
-  }
 
   const [
     { data: profile },
@@ -54,6 +49,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Profile not found" }, { status: 400 });
   }
 
+  const activeKeywords = getActiveSearchKeywords(preferences, profile);
+  if (activeKeywords.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          "No active search keywords. Add and activate keywords on your Profile, then save.",
+      },
+      { status: 400 }
+    );
+  }
+
   if (!resumes?.length) {
     return NextResponse.json(
       { error: "Upload at least one resume before searching for jobs" },
@@ -76,7 +82,7 @@ export async function POST(request: Request) {
       profile,
       resume,
       {
-        keywords,
+        activeKeywords,
         location: location || undefined,
         postedWithin,
         workType,
@@ -97,6 +103,7 @@ export async function POST(request: Request) {
       hiddenByPreferences: result.hiddenByPreferences,
       jobsShown: result.jobsShown,
       searchQueryReason: result.searchQueryReason,
+      activeKeywords,
       preferenceExclusions: result.preferenceExclusions,
       jobs: result.jobs,
     });

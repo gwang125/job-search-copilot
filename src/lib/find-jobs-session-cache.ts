@@ -1,10 +1,9 @@
 import type { DiscoveredJobMatch } from "@/types/database";
 import type { LinkedInPostedWithin, LinkedInWorkType } from "@/lib/linkedin/search-jobs";
 
-const STORAGE_VERSION = 4;
+const STORAGE_VERSION = 5;
 
 export interface FindJobsSessionFilters {
-  keywords: string;
   location: string;
   resumeId: string;
   postedWithin: LinkedInPostedWithin;
@@ -21,6 +20,7 @@ export interface FindJobsSessionMeta {
   jobsShown: number;
   resumeName: string;
   searchQueryReason?: string;
+  activeKeywords?: string[];
 }
 
 export interface FindJobsSessionCache {
@@ -56,18 +56,21 @@ export function loadFindJobsSession(
 export function saveFindJobsSession(
   userId: string,
   data: Omit<FindJobsSessionCache, "version" | "savedAt">
-): void {
-  if (typeof window === "undefined") return;
+): string | null {
+  if (typeof window === "undefined") return null;
   try {
+    const savedAt = new Date().toISOString();
     const payload: FindJobsSessionCache = {
       version: STORAGE_VERSION,
-      savedAt: new Date().toISOString(),
+      savedAt,
       ...data,
     };
     sessionStorage.setItem(storageKey(userId), JSON.stringify(payload));
+    return savedAt;
   } catch {
     /* quota or private mode — ignore */
   }
+  return null;
 }
 
 export function clearFindJobsSession(userId: string): void {
