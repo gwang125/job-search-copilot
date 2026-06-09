@@ -47,8 +47,7 @@ export function DocumentsList({
     return (
       <Card>
         <p className="text-sm text-zinc-500">
-          No archived documents. The Job Analyzer now saves analyses to your
-          applications list instead of generating new files.
+          No archived cover letters from earlier versions.
         </p>
       </Card>
     );
@@ -57,7 +56,7 @@ export function DocumentsList({
   return (
     <div className="space-y-4">
       <p className="text-sm text-zinc-500">
-        Older generated files from previous versions of the app.
+        Generated cover letters from previous sessions.
       </p>
       {initial.map((doc) => (
         <Card
@@ -75,11 +74,7 @@ export function DocumentsList({
                 {doc.job?.company ? ` at ${doc.job.company}` : ""}
               </p>
               <div className="mt-2 flex gap-2">
-                <Badge variant="info">
-                  {doc.document_type === "tailored_resume"
-                    ? "Tailored resume"
-                    : "Cover letter"}
-                </Badge>
+                <Badge variant="info">Cover letter</Badge>
                 <span className="text-xs text-zinc-400">
                   {new Date(doc.created_at).toLocaleDateString()}
                 </span>

@@ -4,7 +4,7 @@ import { PageContainer } from "@/components/layout/page-container";
 import { Card } from "@/components/ui/card";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { SectionHeader } from "@/components/layout/section-header";
-import { Briefcase, Compass, FileText, ScanSearch, TrendingUp } from "lucide-react";
+import { Briefcase, Compass, FileText, Mail, ScanSearch } from "lucide-react";
 import { resolveJobRelation, type JobSummary } from "@/lib/utils";
 
 export default async function DashboardPage() {
@@ -16,7 +16,6 @@ export default async function DashboardPage() {
   const [
     { count: applicationsCount },
     { count: resumesCount },
-    { count: documentsCount },
     { data: recentApplications },
   ] = await Promise.all([
     supabase
@@ -25,10 +24,6 @@ export default async function DashboardPage() {
       .eq("user_id", user!.id),
     supabase
       .from("resumes")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user!.id),
-    supabase
-      .from("generated_documents")
       .select("*", { count: "exact", head: true })
       .eq("user_id", user!.id),
     supabase
@@ -53,10 +48,10 @@ export default async function DashboardPage() {
       href: "/resumes",
     },
     {
-      label: "Generated docs",
-      value: documentsCount ?? 0,
-      icon: TrendingUp,
-      href: "/documents",
+      label: "Cover letters",
+      value: "PDF",
+      icon: Mail,
+      href: "/cover-letters",
     },
   ];
 

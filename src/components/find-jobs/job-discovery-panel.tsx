@@ -37,6 +37,28 @@ interface JobDiscoveryPanelProps {
 const selectClassName =
   "h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20";
 
+const MIN_MATCH_SCORE = 0;
+const MAX_MATCH_SCORE = 100;
+const MIN_JOB_LIMIT = 5;
+const MAX_JOB_LIMIT = 10;
+const DEFAULT_CANDIDATE_LIMIT = 40;
+const MIN_CANDIDATE_LIMIT = 12;
+const MAX_CANDIDATE_LIMIT = 80;
+
+function clampNumber(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function sameKeywords(a: string[] | undefined, b: string[]) {
+  if (!a || a.length !== b.length) return false;
+  const normalize = (values: string[]) =>
+    values.map((v) => v.trim().toLowerCase()).sort();
+  const left = normalize(a);
+  const right = normalize(b);
+  return left.every((value, index) => value === right[index]);
+}
+
 export function JobDiscoveryPanel({
   userId,
   resumes,
@@ -47,13 +69,26 @@ export function JobDiscoveryPanel({
     () => resumes.find((r) => r.is_primary) ?? resumes[0],
     [resumes]
   );
+  const activeKeywordsKey = useMemo(
+    () =>
+      activeSearchKeywords
+        .map((keyword) => keyword.trim().toLowerCase())
+        .sort()
+        .join("\n"),
+    [activeSearchKeywords]
+  );
 
   const [location, setLocation] = useState(defaultLocation);
   const [resumeId, setResumeId] = useState(primaryResume?.id ?? "");
   const [postedWithin, setPostedWithin] = useState<LinkedInPostedWithin>("any");
   const [workType, setWorkType] = useState<LinkedInWorkType>("any");
   const [minMatchScore, setMinMatchScore] = useState(60);
-  const [limit, setLimit] = useState(15);
+  const [limit, setLimit] = useState(5);
+  const [limitInput, setLimitInput] = useState("5");
+  const [candidateLimit, setCandidateLimit] = useState(DEFAULT_CANDIDATE_LIMIT);
+  const [candidateLimitInput, setCandidateLimitInput] = useState(
+    String(DEFAULT_CANDIDATE_LIMIT)
+  );
 
   const [sessionReady, setSessionReady] = useState(false);
   const [sessionSavedAt, setSessionSavedAt] = useState<string | null>(null);
@@ -79,7 +114,10 @@ export function JobDiscoveryPanel({
 
   useEffect(() => {
     const cached = loadFindJobsSession(userId);
-    if (cached) {
+    if (
+      cached &&
+      sameKeywords(cached.meta.activeKeywords, activeSearchKeywords)
+    ) {
       skipNextSave.current = true;
       setLocation(cached.filters.location);
       setResumeId(cached.filters.resumeId);
@@ -87,12 +125,24 @@ export function JobDiscoveryPanel({
       setWorkType(cached.filters.workType);
       setMinMatchScore(cached.filters.minMatchScore);
       setLimit(cached.filters.limit);
+      setLimitInput(String(cached.filters.limit));
+      setCandidateLimit(cached.filters.candidateLimit);
+      setCandidateLimitInput(String(cached.filters.candidateLimit));
       setJobs(cached.jobs);
       setMeta(cached.meta);
       setSessionSavedAt(cached.savedAt);
+    } else if (cached) {
+      clearFindJobsSession(userId);
     }
     setSessionReady(true);
-  }, [userId]);
+  }, [userId, activeKeywordsKey, activeSearchKeywords]);
+
+  useEffect(() => {
+    setResumeId((current) => {
+      if (resumes.some((resume) => resume.id === current)) return current;
+      return primaryResume?.id ?? resumes[0]?.id ?? "";
+    });
+  }, [primaryResume?.id, resumes]);
 
   useEffect(() => {
     if (!sessionReady || loading) return;
@@ -111,6 +161,7 @@ export function JobDiscoveryPanel({
         workType,
         minMatchScore,
         limit,
+        candidateLimit,
       },
       jobs,
       meta: {
@@ -129,6 +180,7 @@ export function JobDiscoveryPanel({
     workType,
     minMatchScore,
     limit,
+    candidateLimit,
     jobs,
     meta,
     activeSearchKeywords,
@@ -141,6 +193,28 @@ export function JobDiscoveryPanel({
     setMeta(null);
     setSessionSavedAt(null);
     setError(null);
+  }
+
+  function normalizeLimitInput() {
+    const normalized = clampNumber(
+      Number(limitInput),
+      MIN_JOB_LIMIT,
+      MAX_JOB_LIMIT
+    );
+    setLimit(normalized);
+    setLimitInput(String(normalized));
+    return normalized;
+  }
+
+  function normalizeCandidateLimitInput() {
+    const normalized = clampNumber(
+      Number(candidateLimitInput),
+      MIN_CANDIDATE_LIMIT,
+      MAX_CANDIDATE_LIMIT
+    );
+    setCandidateLimit(normalized);
+    setCandidateLimitInput(String(normalized));
+    return normalized;
   }
 
   async function markAsApplied(job: DiscoveredJobMatch) {
@@ -216,6 +290,8 @@ export function JobDiscoveryPanel({
 
   async function runSearch(e: React.FormEvent) {
     e.preventDefault();
+    const normalizedLimit = normalizeLimitInput();
+    const normalizedCandidateLimit = normalizeCandidateLimitInput();
     setLoading(true);
     setError(null);
     setJobs([]);
@@ -232,8 +308,13 @@ export function JobDiscoveryPanel({
           resumeId: resumeId || undefined,
           postedWithin,
           workType,
-          minMatchScore,
-          limit,
+          minMatchScore: clampNumber(
+            minMatchScore,
+            MIN_MATCH_SCORE,
+            MAX_MATCH_SCORE
+          ),
+          limit: normalizedLimit,
+          candidateLimit: normalizedCandidateLimit,
         }),
       });
       const data = await res.json();
@@ -274,10 +355,11 @@ export function JobDiscoveryPanel({
   return (
     <div className="space-y-6">
       <Alert>
-        Results come from LinkedIn&apos;s public job search. Listings at companies
+        Results come from LinkedIn&apos;s public job search, paced slowly to avoid
+        rate limits. Listings at companies
         you already applied to are skipped, along with jobs you marked{" "}
-        <span className="font-medium">Not consider</span>, and your profile hard
-        requirements, before AI scoring. Your last search stays in this tab until you
+        <span className="font-medium">Not consider</span>, and your Job search
+        filters, before AI scoring. Your last search stays in this tab until you
         search again.{" "}
         <Link href="/profile" className="font-medium text-indigo-600 hover:underline">
           Edit search keywords &amp; filters
@@ -312,7 +394,7 @@ export function JobDiscoveryPanel({
             <div className="space-y-2 sm:col-span-2">
               <Label>Search keywords</Label>
               <p className="text-xs text-zinc-500">
-                From your Profile — only active keywords are searched.{" "}
+                From Find jobs search keywords - only active keywords are searched.{" "}
                 <Link
                   href="/profile"
                   className="font-medium text-indigo-600 hover:underline"
@@ -396,21 +478,66 @@ export function JobDiscoveryPanel({
               <Input
                 id="minMatchScore"
                 type="number"
-                min={0}
-                max={100}
+                min={MIN_MATCH_SCORE}
+                max={MAX_MATCH_SCORE}
                 value={minMatchScore}
-                onChange={(e) => setMinMatchScore(Number(e.target.value))}
+                onChange={(e) =>
+                  setMinMatchScore(
+                    clampNumber(
+                      Number(e.target.value),
+                      MIN_MATCH_SCORE,
+                      MAX_MATCH_SCORE
+                    )
+                  )
+                }
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="limit">Jobs to score (5–25)</Label>
+              <Label htmlFor="limit">
+                Jobs to score ({MIN_JOB_LIMIT}-{MAX_JOB_LIMIT})
+              </Label>
               <Input
                 id="limit"
                 type="number"
-                min={5}
-                max={25}
-                value={limit}
-                onChange={(e) => setLimit(Number(e.target.value))}
+                min={MIN_JOB_LIMIT}
+                max={MAX_JOB_LIMIT}
+                value={limitInput}
+                onBlur={normalizeLimitInput}
+                onChange={(e) => {
+                  setLimitInput(e.target.value);
+                  const nextLimit = Number(e.target.value);
+                  if (Number.isFinite(nextLimit)) {
+                    setLimit(
+                      clampNumber(nextLimit, MIN_JOB_LIMIT, MAX_JOB_LIMIT)
+                    );
+                  }
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="candidateLimit">
+                Candidates to inspect ({MIN_CANDIDATE_LIMIT}-{MAX_CANDIDATE_LIMIT})
+              </Label>
+              <Input
+                id="candidateLimit"
+                type="number"
+                min={MIN_CANDIDATE_LIMIT}
+                max={MAX_CANDIDATE_LIMIT}
+                value={candidateLimitInput}
+                onBlur={normalizeCandidateLimitInput}
+                onChange={(e) => {
+                  setCandidateLimitInput(e.target.value);
+                  const nextLimit = Number(e.target.value);
+                  if (Number.isFinite(nextLimit)) {
+                    setCandidateLimit(
+                      clampNumber(
+                        nextLimit,
+                        MIN_CANDIDATE_LIMIT,
+                        MAX_CANDIDATE_LIMIT
+                      )
+                    );
+                  }
+                }}
               />
             </div>
           </div>
@@ -455,7 +582,7 @@ export function JobDiscoveryPanel({
               )}
               {meta.hiddenByPreferences > 0 && (
                 <>
-                  . {meta.hiddenByPreferences} filtered by your preferences
+                  . {meta.hiddenByPreferences} filtered by Job search filters
                 </>
               )}
               {meta.hiddenByApplied > 0 && (

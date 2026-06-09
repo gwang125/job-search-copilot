@@ -175,7 +175,6 @@ export async function POST(request: Request) {
       missing_skills: analysis.missingSkills,
       risks: analysis.risks,
       recommendation: analysis.recommendation,
-      suggested_changes: analysis.suggestedChanges,
       raw_response: analysis as unknown as Record<string, unknown>,
     })
     .select()

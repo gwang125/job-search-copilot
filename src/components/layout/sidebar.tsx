@@ -8,6 +8,7 @@ import {
   FileText,
   LayoutDashboard,
   LogOut,
+  Mail,
   Menu,
   ScanSearch,
   Sparkles,
@@ -24,6 +25,7 @@ const nav = [
   { href: "/resumes", label: "Resumes", icon: FileText },
   { href: "/find-jobs", label: "Find jobs", icon: Compass },
   { href: "/job-analyzer", label: "Job Analyzer", icon: ScanSearch },
+  { href: "/cover-letters", label: "Cover letters", icon: Mail },
   { href: "/applications", label: "Applications", icon: Briefcase },
 ];
 

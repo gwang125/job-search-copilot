@@ -5,27 +5,26 @@
 import { readFileSync, existsSync, readdirSync } from "fs";
 import { join } from "path";
 
-function findLayoutCss(dir) {
-  if (!existsSync(dir)) return null;
+function findCssFiles(dir) {
+  if (!existsSync(dir)) return [];
+  const files = [];
   for (const name of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, name.name);
     if (name.isDirectory()) {
-      const found = findLayoutCss(path);
-      if (found) return found;
-    } else if (name.name === "layout.css" && path.replace(/\\/g, "/").includes("/css/app/")) {
-      return path;
+      files.push(...findCssFiles(path));
+    } else if (name.name.endsWith(".css")) {
+      files.push(path);
     }
   }
-  return null;
+  return files;
 }
 
 const staticCssDir = join(process.cwd(), ".next", "static", "css");
-const cssPath =
-  findLayoutCss(staticCssDir) ?? join(staticCssDir, "app", "layout.css");
+const cssPaths = findCssFiles(staticCssDir);
 
-if (!existsSync(cssPath)) {
+if (cssPaths.length === 0) {
   console.error("\n❌ Tailwind CSS bundle not found.");
-  console.error("   Expected something like: .next/static/css/app/layout.css\n");
+  console.error("   Expected at least one CSS file under .next/static/css\n");
   console.error("   This file is created by Next.js when you build or run dev.\n");
   console.error("   Run these commands in order:\n");
   console.error("     npm run build");
@@ -36,15 +35,26 @@ if (!existsSync(cssPath)) {
   process.exit(1);
 }
 
-const css = readFileSync(cssPath, "utf8");
-const checks = [".flex{", ".flex ", ".lg\\:ml-", ".hidden{", ".hidden "];
-const found = checks.some((c) => css.includes(c));
+const checks = [
+  ".flex{",
+  ".grid{",
+  ".hidden{",
+  ".bg-zinc-50",
+  ".text-zinc-900",
+  ".antialiased",
+  ".lg\\:ml-",
+];
+const cssWithUtilities = cssPaths.find((path) => {
+  const css = readFileSync(path, "utf8");
+  return checks.some((c) => css.includes(c));
+});
 
-if (!found) {
-  console.error("\n❌ layout.css exists but Tailwind utilities are missing.");
-  console.error("   File:", cssPath);
+if (!cssWithUtilities) {
+  console.error("\n❌ CSS bundles exist but Tailwind utilities are missing.");
+  console.error("   Files checked:");
+  for (const path of cssPaths) console.error("   -", path);
   console.error("\n   Try: Remove-Item -Recurse -Force .next; npm run build\n");
   process.exit(1);
 }
 
-console.log("✅ OK: Tailwind utilities found in", cssPath);
+console.log("✅ OK: Tailwind utilities found in", cssWithUtilities);

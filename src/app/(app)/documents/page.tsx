@@ -17,6 +17,7 @@ export default async function DocumentsPage() {
     .from("generated_documents")
     .select("*, job:jobs(company, job_title)")
     .eq("user_id", user!.id)
+    .eq("document_type", "cover_letter")
     .order("created_at", { ascending: false });
 
   const rows = (documents ?? []).map((row) =>
@@ -30,7 +31,7 @@ export default async function DocumentsPage() {
   return (
     <PageContainer
       title="Documents"
-      description="Archived PDFs from earlier sessions (optional)."
+      description="Archived cover letters from earlier sessions."
       maxWidth="3xl"
     >
       <DocumentsList documents={rows} />

@@ -137,10 +137,10 @@ export function buildJobSearchQueryFromPreferences(
 
   const searchKeywords: string[] = [];
   if (modifiers.length > 0) {
-    searchKeywords.push(baseRole);
     for (const mod of modifiers.slice(0, 5)) {
       searchKeywords.push(`${baseRole} ${mod}`);
     }
+    searchKeywords.push(baseRole);
   } else {
     searchKeywords.push(baseRole);
     if (input.targetJobTitles.length > 0) {

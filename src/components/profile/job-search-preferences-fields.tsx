@@ -124,7 +124,8 @@ export function JobSearchPreferencesFields({
           />
           <p className="text-xs text-zinc-500">
             Filters out jobs requiring more years (e.g. 5+ years when your max is
-            2). Also flags senior-level experience phrases when max is 3 or less.
+            2). Use 0 for less than 1 year. Also flags senior-level experience
+            phrases when max is 3 or less.
           </p>
         </div>
       </div>

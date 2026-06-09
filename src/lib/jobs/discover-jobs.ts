@@ -27,7 +27,7 @@ import {
 import {
   partitionJobsByPreferences,
 } from "@/lib/jobs/filter-jobs-by-preferences";
-import type { JobSearchPreferences, Profile, Resume } from "@/types/database";
+import type { JobSearchPreferences, Resume } from "@/types/database";
 
 export interface DiscoverJobsInput {
   activeKeywords: string[];
@@ -36,6 +36,7 @@ export interface DiscoverJobsInput {
   workType?: LinkedInWorkType;
   minMatchScore?: number;
   limit?: number;
+  candidateLimit?: number;
 }
 
 export interface DiscoveredJobMatch {
@@ -51,12 +52,18 @@ export interface DiscoveredJobMatch {
 
 const LINKEDIN_PAGE_SIZE = 25;
 
-function discoveryLimits(targetVisibleJobs: number) {
+function discoveryLimits(targetVisibleJobs: number, candidateLimit: number) {
+  const defaultMaxPagesPerKeyword = targetVisibleJobs <= 8 ? 1 : 2;
+  const maxPagesPerKeyword =
+    candidateLimit <= 40
+      ? defaultMaxPagesPerKeyword
+      : Math.min(4, Math.ceil(candidateLimit / LINKEDIN_PAGE_SIZE));
+
   return {
-    /** Extra hard-pass jobs beyond visible count (for min match % drop-off) */
-    targetHardPassJobs: Math.min(targetVisibleJobs + 5, 20),
-    maxPagesPerKeyword: Math.min(4, Math.max(2, Math.ceil(targetVisibleJobs / 4))),
-    maxCandidatesToInspect: Math.min(100, Math.max(25, targetVisibleJobs * 6)),
+    /** Keep LinkedIn guest traffic conservative; 429s are common with bursty scraping. */
+    targetHardPassJobs: Math.min(targetVisibleJobs + 2, 10),
+    maxPagesPerKeyword,
+    maxCandidatesToInspect: candidateLimit,
   };
 }
 
@@ -70,7 +77,6 @@ function resolveSearchWorkType(
 }
 
 export async function discoverMatchingLinkedInJobs(
-  profile: Profile,
   resume: Resume,
   input: DiscoverJobsInput,
   preferences: JobSearchPreferences,
@@ -92,8 +98,12 @@ export async function discoverMatchingLinkedInJobs(
   jobs: DiscoveredJobMatch[];
 }> {
   const targetVisibleJobs = Math.min(Math.max(input.limit ?? 10, 5), 25);
+  const candidateLimit = Math.min(
+    80,
+    Math.max(12, Math.round(input.candidateLimit ?? 40))
+  );
   const { targetHardPassJobs, maxPagesPerKeyword, maxCandidatesToInspect } =
-    discoveryLimits(targetVisibleJobs);
+    discoveryLimits(targetVisibleJobs, candidateLimit);
   const minMatchScore = input.minMatchScore ?? 55;
   const formWorkType = input.workType ?? "any";
   const searchWorkType = resolveSearchWorkType(formWorkType, preferences);
@@ -101,7 +111,7 @@ export async function discoverMatchingLinkedInJobs(
   const queryPlan = buildCombinedSearchQueryPlan(input.activeKeywords, {
     location: input.location,
     workType: searchWorkType,
-    targetJobTitles: profile.target_job_titles ?? [],
+    targetJobTitles: [],
     preferences,
   });
 
@@ -199,7 +209,8 @@ export async function discoverMatchingLinkedInJobs(
       if (candidatesChecked >= maxCandidatesToInspect) break;
 
       const description = await fetchFullLinkedInJobDescription(
-        listing.linkedInJobId
+        listing.linkedInJobId,
+        { allowViewFallback: false }
       );
 
       if (!description) {
@@ -265,7 +276,7 @@ export async function discoverMatchingLinkedInJobs(
         { role: "system", content: JOB_DISCOVERY_SCORE_SYSTEM },
         {
           role: "user",
-          content: buildJobDiscoveryScorePrompt(profile, resume, forScoring),
+          content: buildJobDiscoveryScorePrompt(resume, forScoring),
         },
       ],
     });

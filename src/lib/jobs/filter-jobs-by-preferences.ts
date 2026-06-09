@@ -54,25 +54,55 @@ const PHD_PATTERNS: RegExp[] = [
   /\brequires?\s+a\s+ph\.?\s*d\b/i,
 ];
 
+const NUMBER_WORDS: Record<string, number> = {
+  zero: 0,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+};
+
+function parseExperienceNumber(value: string | undefined): number {
+  if (!value) return Number.NaN;
+  const normalized = value.toLowerCase();
+  return NUMBER_WORDS[normalized] ?? Number(normalized);
+}
+
 const EXPERIENCE_YEAR_PATTERNS: Array<{
   regex: RegExp;
-  pick: (match: RegExpMatchArray) => number;
+  pick: (match: RegExpExecArray) => number;
 }> = [
   {
-    regex: /(\d+)\s*\+\s*years?\s*(?:of\s+)?(?:relevant\s+)?experience/gi,
-    pick: (m) => Number(m[1]),
+    regex:
+      /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?:\+|plus)\s*(?:years?|yrs?)(?:['’])?(?:\s+(?:of|in|with|relevant|related|professional|work|industry|hands-on|[\w/#.+-]+)){0,8}\s+experience\b/gi,
+    pick: (m) => parseExperienceNumber(m[1]),
   },
   {
-    regex: /(?:minimum|min\.?|at\s+least)\s+(\d+)\s+years?/gi,
-    pick: (m) => Number(m[1]),
+    regex:
+      /\b(?:minimum|min\.?|at\s+least|requires?|requiring|requirement:?|need(?:s|ed)?|must\s+have)\s+(?:of\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?:\+|plus)?\s*(?:years?|yrs?)\b/gi,
+    pick: (m) => parseExperienceNumber(m[1]),
   },
   {
-    regex: /(\d+)\s*-\s*(\d+)\s*years?\s*(?:of\s+)?(?:relevant\s+)?experience/gi,
-    pick: (m) => Math.max(Number(m[1]), Number(m[2])),
+    regex:
+      /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?:-|to|–)\s*(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?:years?|yrs?)(?:['’])?(?:\s+(?:of|in|with|relevant|related|professional|work|industry|hands-on|[\w/#.+-]+)){0,8}\s+experience\b/gi,
+    pick: (m) =>
+      Math.max(parseExperienceNumber(m[1]), parseExperienceNumber(m[2])),
   },
   {
-    regex: /(\d+)\s+years?\s*(?:of\s+)?(?:relevant\s+)?experience/gi,
-    pick: (m) => Number(m[1]),
+    regex:
+      /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?:years?|yrs?)(?:['’])?(?:\s+(?:of|in|with|relevant|related|professional|work|industry|hands-on|[\w/#.+-]+)){0,8}\s+experience\b/gi,
+    pick: (m) => parseExperienceNumber(m[1]),
+  },
+  {
+    regex:
+      /\b(?:bachelor'?s|bs|ba|master'?s|ms|ma|degree)\b.{0,80}\b(?:and|plus|\+)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?:years?|yrs?)\b/gi,
+    pick: (m) => parseExperienceNumber(m[1]),
   },
 ];
 

@@ -14,9 +14,11 @@ export const FULL_JD_MAX_LENGTH = 20000;
  * Fetch the fullest LinkedIn job description available (guest API, then view page).
  */
 export async function fetchFullLinkedInJobDescription(
-  linkedInJobId: string
+  linkedInJobId: string,
+  options: { allowViewFallback?: boolean } = {}
 ): Promise<string | null> {
   let best = "";
+  const allowViewFallback = options.allowViewFallback ?? true;
 
   await throttleLinkedInRequest();
   const guest = await parseLinkedInJobViaGuestApi(linkedInJobId);
@@ -26,6 +28,10 @@ export async function fetchFullLinkedInJobDescription(
 
   if (best.length >= FULL_JD_MIN_LENGTH) {
     return best.slice(0, FULL_JD_MAX_LENGTH);
+  }
+
+  if (!allowViewFallback) {
+    return null;
   }
 
   await throttleLinkedInRequest();

@@ -1,4 +1,5 @@
-const DEFAULT_MIN_INTERVAL_MS = 900;
+const DEFAULT_MIN_INTERVAL_MS = 3500;
+const DEFAULT_JITTER_MS = 1200;
 
 let lastLinkedInRequestAt = 0;
 
@@ -12,7 +13,8 @@ export async function throttleLinkedInRequest(
 ): Promise<void> {
   const now = Date.now();
   const elapsed = now - lastLinkedInRequestAt;
-  const waitMs = minIntervalMs - elapsed;
+  const jitterMs = Math.floor(Math.random() * DEFAULT_JITTER_MS);
+  const waitMs = minIntervalMs + jitterMs - elapsed;
   if (waitMs > 0) {
     await sleep(waitMs);
   }

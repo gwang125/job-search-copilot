@@ -67,8 +67,7 @@ Return JSON:
   "matchedSkills": ["..."],
   "missingSkills": ["..."],
   "risks": ["..."],
-  "recommendation": "apply" | "maybe" | "skip",
-  "suggestedChanges": ["improvements for the chosen resume before applying"]
+  "recommendation": "apply" | "maybe" | "skip"
 }
 
 Rules:
@@ -92,7 +91,6 @@ export interface JobForDiscoveryScore {
 }
 
 export function buildJobDiscoveryScorePrompt(
-  profile: Profile,
   resume: Resume,
   jobs: JobForDiscoveryScore[]
 ): string {
@@ -108,10 +106,7 @@ ${j.description.slice(0, DISCOVERY_SCORE_JD_MAX_LENGTH)}`
     )
     .join("\n\n");
 
-  return `Score each job against this candidate (0-100). Use the resume as primary evidence.
-
-Candidate profile:
-${buildProfileContext(profile)}
+  return `Score each job against this candidate (0-100). Use only the selected resume as candidate evidence.
 
 Resume (${resume.name}):
 ${resume.extracted_text.slice(0, 6000)}
@@ -128,59 +123,11 @@ Return JSON:
 
 Rules:
 - Include every job id from the input exactly once
+- Use only facts from the selected resume. Do not use profile, saved preferences, or unstated background.
 - 80+ = strong match, 60-79 = reasonable, below 60 = weak`;
 }
 
-export const TAILOR_RESUME_SYSTEM = `You tailor resumes for ATS and specific job descriptions.
-CRITICAL: Only use truthful information from the profile and source resume. Never invent employers, titles, dates, or skills.
-Rewrite bullets to emphasize relevant experience. Use clear, concise, ATS-friendly language.
-Return ONLY valid JSON.`;
-
-export function buildTailorResumePrompt(
-  profile: Profile,
-  resume: Resume,
-  jobDescription: string,
-  company: string | null,
-  jobTitle: string | null,
-  analysisHints: string[]
-): string {
-  return `Target Job:
-Company: ${company ?? "Unknown"}
-Title: ${jobTitle ?? "Unknown"}
-
-Job Description:
-${jobDescription}
-
-Candidate Profile:
-${buildProfileContext(profile)}
-
-Source Resume (${resume.name}):
-${resume.extracted_text}
-
-Improvement hints from analysis:
-${analysisHints.join("\n")}
-
-Return JSON tailored resume:
-{
-  "summary": "2-3 sentence professional summary",
-  "skills": ["skill1", "skill2"],
-  "experience": [
-    {
-      "company": "...",
-      "title": "...",
-      "location": "...",
-      "dates": "...",
-      "bullets": ["..."]
-    }
-  ],
-  "education": [
-    { "school": "...", "degree": "...", "dates": "...", "details": "..." }
-  ],
-  "projects": [{ "name": "...", "bullets": ["..."] }]
-}`;
-}
-
-export const COVER_LETTER_SYSTEM = `You write concise, professional cover letters that sound human—not generic AI fluff.
+export const COVER_LETTER_SYSTEM = `You write concise, professional cover letters that sound human, not generic AI fluff.
 Use only factual details from the profile and resume. 3-4 short paragraphs max.
 Return ONLY the cover letter plain text, no JSON.`;
 

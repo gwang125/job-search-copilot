@@ -5,28 +5,54 @@ import {
   COVER_LETTER_SYSTEM,
   buildCoverLetterPrompt,
 } from "@/lib/openai/prompts";
-import type { Profile, Resume } from "@/types/database";
+import type { Job, Profile, Resume } from "@/types/database";
 
 export async function POST(request: Request) {
   const auth = await requireUser();
   if (auth.error) return auth.error;
 
-  const { jobId, resumeId, applicationId } = await request.json();
+  const {
+    jobId,
+    resumeId,
+    company,
+    jobTitle,
+    jobDescription,
+  } = await request.json();
 
-  if (!jobId || !resumeId) {
+  if (!resumeId) {
     return NextResponse.json(
-      { error: "jobId and resumeId are required" },
+      { error: "resumeId is required" },
       { status: 400 }
     );
   }
 
-  const [{ data: job }, { data: profile }, { data: resume }] = await Promise.all([
-    auth.supabase
+  let job: Pick<Job, "company" | "job_title" | "job_description"> | null = null;
+
+  if (jobId) {
+    const { data } = await auth.supabase
       .from("jobs")
-      .select("*")
+      .select("company, job_title, job_description")
       .eq("id", jobId)
       .eq("user_id", auth.user.id)
-      .single(),
+      .single();
+
+    job = data;
+  } else if (jobDescription?.trim()) {
+    job = {
+      company: company ?? null,
+      job_title: jobTitle ?? null,
+      job_description: jobDescription.trim(),
+    };
+  }
+
+  if (!job) {
+    return NextResponse.json(
+      { error: "jobId or jobDescription is required" },
+      { status: 400 }
+    );
+  }
+
+  const [{ data: profile }, { data: resume }] = await Promise.all([
     auth.supabase.from("profiles").select("*").eq("id", auth.user.id).single(),
     auth.supabase
       .from("resumes")
@@ -36,8 +62,11 @@ export async function POST(request: Request) {
       .single(),
   ]);
 
-  if (!job || !profile || !resume) {
-    return NextResponse.json({ error: "Missing job, profile, or resume" }, { status: 404 });
+  if (!profile || !resume) {
+    return NextResponse.json(
+      { error: "Missing profile or resume" },
+      { status: 404 }
+    );
   }
 
   const openai = getOpenAIClient();
@@ -63,26 +92,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Empty AI response" }, { status: 500 });
   }
 
-  const title = `Cover Letter — ${job.job_title ?? "Role"} at ${job.company ?? "Company"}`;
+  const title = `Cover Letter - ${job.job_title ?? "Role"} at ${job.company ?? "Company"}`;
 
-  const { data: document, error: docError } = await auth.supabase
-    .from("generated_documents")
-    .insert({
-      user_id: auth.user.id,
-      job_id: jobId,
-      application_id: applicationId ?? null,
-      resume_id: resumeId,
-      document_type: "cover_letter",
-      title,
-      content,
-      metadata: { sourceResumeId: resumeId },
-    })
-    .select()
-    .single();
-
-  if (docError) {
-    return NextResponse.json({ error: docError.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ document, content });
+  return NextResponse.json({ content, title });
 }

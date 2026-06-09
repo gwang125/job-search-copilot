@@ -8,7 +8,7 @@ export type ApplicationStatus =
 
 export type AiRecommendation = "apply" | "maybe" | "skip";
 
-export type GeneratedDocumentType = "tailored_resume" | "cover_letter";
+export type GeneratedDocumentType = "cover_letter";
 
 export interface EducationEntry {
   school: string;
@@ -172,7 +172,6 @@ export interface AiAnalysis {
   missing_skills: string[];
   risks: string[];
   recommendation: AiRecommendation;
-  suggested_changes: string[];
   raw_response: Record<string, unknown> | null;
   created_at: string;
 }
@@ -210,7 +209,6 @@ export interface JobMatchAnalysis {
   missingSkills: string[];
   risks: string[];
   recommendation: AiRecommendation;
-  suggestedChanges: string[];
   resumeScores?: ResumeMatchScore[];
 }
 
@@ -231,30 +229,6 @@ export interface DuplicateWarning {
     company: string | null;
     job_title: string | null;
     status: ApplicationStatus;
-  }>;
-}
-
-export interface TailoredResumeContent {
-  summary: string;
-  skills: string[];
-  experience: Array<{
-    company: string;
-    title: string;
-    location?: string;
-    dates?: string;
-    bullets: string[];
-  }>;
-  education: Array<{
-    school: string;
-    degree?: string;
-    major?: string;
-    dates?: string;
-    details?: string;
-  }>;
-  projects?: Array<{
-    name: string;
-    technologies?: string[];
-    bullets: string[];
   }>;
 }
 

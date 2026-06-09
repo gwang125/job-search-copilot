@@ -59,6 +59,7 @@ export function statusLabel(status: string): string {
 
 /** @deprecated Resumes are uploaded via /api/resumes/upload (PDF/DOCX only). */
 export async function extractTextFromFile(_file: File): Promise<string> {
+  void _file;
   throw new Error(
     "Upload PDF or DOCX files on the Resumes page instead of pasting text."
   );

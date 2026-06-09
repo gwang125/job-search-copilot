@@ -43,10 +43,47 @@ describe("extractRequiredYearsOfExperience", () => {
     );
   });
 
+  it("detects minimum of 3 years", () => {
+    assert.equal(
+      extractRequiredYearsOfExperience("Minimum of 3 years of experience"),
+      3
+    );
+  });
+
   it("uses upper bound for ranges", () => {
     assert.equal(
       extractRequiredYearsOfExperience("2-4 years of experience required"),
       4
+    );
+  });
+
+  it("detects abbreviated years", () => {
+    assert.equal(
+      extractRequiredYearsOfExperience("Requires 3+ yrs professional experience"),
+      3
+    );
+  });
+
+  it("detects years with domain words before experience", () => {
+    assert.equal(
+      extractRequiredYearsOfExperience(
+        "Required: 3+ years of software development experience"
+      ),
+      3
+    );
+  });
+
+  it("detects written number years", () => {
+    assert.equal(
+      extractRequiredYearsOfExperience("Three years of industry experience"),
+      3
+    );
+  });
+
+  it("detects degree plus years requirements", () => {
+    assert.equal(
+      extractRequiredYearsOfExperience("Bachelor's degree plus 3 years required"),
+      3
     );
   });
 });
@@ -91,6 +128,34 @@ describe("filterJobsByPreferences", () => {
     );
     assert.equal(result.pass, false);
     assert.ok(result.exclusionReasons[0]?.includes("5"));
+  });
+
+  it("filters 1+ year requirements when max is less than 1 year", () => {
+    const [result] = filterJobsByPreferences(
+      [
+        {
+          ...baseJob,
+          description: "1+ years of experience with React.",
+        },
+      ],
+      prefs({ max_years_experience: 0 })
+    );
+    assert.equal(result.pass, false);
+    assert.ok(result.exclusionReasons[0]?.includes("1"));
+  });
+
+  it("filters 3+ yrs requirements when max is less than 1 year", () => {
+    const [result] = filterJobsByPreferences(
+      [
+        {
+          ...baseJob,
+          description: "Required: 3+ yrs professional experience in frontend.",
+        },
+      ],
+      prefs({ max_years_experience: 0 })
+    );
+    assert.equal(result.pass, false);
+    assert.ok(result.exclusionReasons[0]?.includes("3"));
   });
 
   it("filters blocked keyword in title", () => {

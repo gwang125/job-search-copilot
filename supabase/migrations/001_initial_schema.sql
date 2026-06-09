@@ -16,7 +16,7 @@ create type application_status as enum (
 
 create type ai_recommendation as enum ('apply', 'maybe', 'skip');
 
-create type generated_document_type as enum ('tailored_resume', 'cover_letter');
+create type generated_document_type as enum ('cover_letter');
 
 -- Profiles (1:1 with auth.users)
 create table public.profiles (
@@ -98,7 +98,6 @@ create table public.ai_analyses (
   missing_skills text[] not null default '{}',
   risks text[] not null default '{}',
   recommendation ai_recommendation not null,
-  suggested_changes text[] not null default '{}',
   raw_response jsonb,
   created_at timestamptz not null default now()
 );

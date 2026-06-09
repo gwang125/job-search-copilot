@@ -9,15 +9,11 @@ import { Plus, Trash2 } from "lucide-react";
 interface JobSearchKeywordsFieldsProps {
   keywords: JobSearchKeywordEntry[];
   onChange: (keywords: JobSearchKeywordEntry[]) => void;
-  onImportFromTargetTitles?: () => void;
-  targetTitlesAvailable?: boolean;
 }
 
 export function JobSearchKeywordsFields({
   keywords,
   onChange,
-  onImportFromTargetTitles,
-  targetTitlesAvailable,
 }: JobSearchKeywordsFieldsProps) {
   function patchEntry(index: number, patch: Partial<JobSearchKeywordEntry>) {
     onChange(
@@ -47,10 +43,7 @@ export function JobSearchKeywordsFields({
 
       {keywords.length === 0 ? (
         <p className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50/80 px-4 py-3 text-sm text-zinc-500">
-          No search keywords yet. Add one below
-          {targetTitlesAvailable
-            ? ", or import from your target job titles."
-            : "."}
+          No search keywords yet. Add one below.
         </p>
       ) : (
         <ul className="space-y-2">
@@ -98,16 +91,6 @@ export function JobSearchKeywordsFields({
           <Plus className="h-4 w-4" />
           Add keyword
         </Button>
-        {onImportFromTargetTitles && targetTitlesAvailable && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onImportFromTargetTitles}
-          >
-            Import from target titles
-          </Button>
-        )}
         <span className="text-xs text-zinc-500">
           {activeCount} active for Find jobs
         </span>

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { JobSearchKeywordEntry, JobSearchPreferences, Profile } from "@/types/database";
+import type { JobSearchKeywordEntry, JobSearchPreferences } from "@/types/database";
 
 export const DEFAULT_JOB_SEARCH_PREFERENCES: Omit<
   JobSearchPreferences,
@@ -119,19 +119,10 @@ export function createSearchKeywordEntry(
   };
 }
 
-export function getActiveSearchKeywords(
-  prefs: JobSearchPreferences,
-  profile?: Pick<Profile, "target_job_titles"> | null
-): string[] {
-  const fromPrefs = prefs.search_keywords
+export function getActiveSearchKeywords(prefs: JobSearchPreferences): string[] {
+  return prefs.search_keywords
     .filter((entry) => entry.is_active && entry.keyword.trim())
     .map((entry) => entry.keyword.trim());
-
-  if (fromPrefs.length > 0) return fromPrefs;
-
-  return (profile?.target_job_titles ?? [])
-    .map((t) => t.trim())
-    .filter(Boolean);
 }
 
 export function normalizeSearchKeywordsForSave(

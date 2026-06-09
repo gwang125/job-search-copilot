@@ -60,9 +60,9 @@ export function linkedInHttpErrorMessage(
     case 429:
       return (
         `${label} was rate-limited by LinkedIn (HTTP 429). ` +
-        `You sent too many requests in a short window (common when searching many keywords or pages at once).` +
+        `LinkedIn received too many requests in a short window.` +
         waitHint +
-        ` Reduce active keywords on Profile, wait 15–30 minutes, then search again.`
+        ` Wait 15–30 minutes, then try again with 1 active keyword and 5 jobs to score.`
       );
     case 403:
       return (

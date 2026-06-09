@@ -25,7 +25,7 @@ export default async function ProfilePage() {
   return (
     <PageContainer
       title="Profile"
-      description="Your background powers job match analysis and resume recommendations."
+      description="Your background powers job match analysis and application tracking."
       maxWidth="3xl"
     >
       <ProfileForm

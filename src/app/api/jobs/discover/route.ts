@@ -8,27 +8,74 @@ import type { Resume } from "@/types/database";
 export const runtime = "nodejs";
 export const maxDuration = 180;
 
+const POSTED_WITHIN_VALUES = new Set<LinkedInPostedWithin>([
+  "any",
+  "24h",
+  "week",
+  "month",
+]);
+const WORK_TYPE_VALUES = new Set<LinkedInWorkType>([
+  "any",
+  "remote",
+  "hybrid",
+  "onsite",
+]);
+
+function parseEnum<T extends string>(
+  value: unknown,
+  allowed: Set<T>,
+  fallback: T
+): T {
+  return typeof value === "string" && allowed.has(value as T)
+    ? (value as T)
+    : fallback;
+}
+
+function parseBoundedInteger(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number
+): number {
+  const numeric =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : fallback;
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(numeric)));
+}
+
 export async function POST(request: Request) {
   const auth = await requireUser();
   if (auth.error) return auth.error;
 
-  const body = await request.json();
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const location = (body.location as string | undefined)?.trim();
   const resumeId = body.resumeId as string | undefined;
-  const postedWithin = (body.postedWithin as LinkedInPostedWithin) ?? "any";
-  const workType = (body.workType as LinkedInWorkType) ?? "any";
-  const minMatchScore =
-    typeof body.minMatchScore === "number" ? body.minMatchScore : 55;
-  const limit = typeof body.limit === "number" ? body.limit : 15;
+  const postedWithin = parseEnum(
+    body.postedWithin,
+    POSTED_WITHIN_VALUES,
+    "any"
+  );
+  const workType = parseEnum(body.workType, WORK_TYPE_VALUES, "any");
+  const minMatchScore = parseBoundedInteger(body.minMatchScore, 55, 0, 100);
+  const limit = parseBoundedInteger(body.limit, 5, 5, 10);
+  const candidateLimit = parseBoundedInteger(body.candidateLimit, 40, 12, 80);
 
   const [
-    { data: profile },
     { data: resumes },
     preferences,
     { data: applications },
     { data: dismissals },
   ] = await Promise.all([
-    auth.supabase.from("profiles").select("*").eq("id", auth.user.id).single(),
     auth.supabase
       .from("resumes")
       .select("*")
@@ -45,11 +92,7 @@ export async function POST(request: Request) {
       .eq("user_id", auth.user.id),
   ]);
 
-  if (!profile) {
-    return NextResponse.json({ error: "Profile not found" }, { status: 400 });
-  }
-
-  const activeKeywords = getActiveSearchKeywords(preferences, profile);
+  const activeKeywords = getActiveSearchKeywords(preferences);
   if (activeKeywords.length === 0) {
     return NextResponse.json(
       {
@@ -79,7 +122,6 @@ export async function POST(request: Request) {
 
   try {
     const result = await discoverMatchingLinkedInJobs(
-      profile,
       resume,
       {
         activeKeywords,
@@ -88,6 +130,7 @@ export async function POST(request: Request) {
         workType,
         minMatchScore,
         limit,
+        candidateLimit,
       },
       preferences,
       applications ?? [],

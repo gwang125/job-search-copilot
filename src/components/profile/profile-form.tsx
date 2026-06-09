@@ -17,10 +17,7 @@ import { ResumeProfileImport } from "@/components/profile/resume-profile-import"
 import { ProjectFields } from "@/components/profile/project-fields";
 import { JobSearchPreferencesFields } from "@/components/profile/job-search-preferences-fields";
 import { JobSearchKeywordsFields } from "@/components/profile/job-search-keywords-fields";
-import {
-  createSearchKeywordEntry,
-  preferencesPayloadForSave,
-} from "@/lib/supabase/job-search-preferences";
+import { preferencesPayloadForSave } from "@/lib/supabase/job-search-preferences";
 import type {
   EducationEntry,
   JobSearchKeywordEntry,
@@ -150,21 +147,8 @@ export function ProfileForm({
   }, [profile]);
 
   useEffect(() => {
-    if (initialPreferences.search_keywords.length > 0) {
-      setJobSearchPreferences(initialPreferences);
-      return;
-    }
-    if (profile?.target_job_titles?.length) {
-      setJobSearchPreferences({
-        ...initialPreferences,
-        search_keywords: profile.target_job_titles.map((title) =>
-          createSearchKeywordEntry(title, true)
-        ),
-      });
-      return;
-    }
     setJobSearchPreferences(initialPreferences);
-  }, [initialPreferences, profile?.target_job_titles]);
+  }, [initialPreferences]);
 
   function buildPreferencesPayload() {
     return preferencesPayloadForSave(userId, {
@@ -443,47 +427,6 @@ export function ProfileForm({
 
       <Card>
         <SectionHeader
-          title="Job preferences"
-          description="Helps match you to the right roles and locations."
-        />
-        <div className="space-y-5">
-          <FormInput
-            label="Skills"
-            id="skills"
-            hint="Comma-separated list"
-            value={skills}
-            onChange={(e) => setSkills(e.target.value)}
-            placeholder="React, TypeScript, Node.js"
-          />
-          <FormInput
-            label="Target job titles"
-            id="targets"
-            value={targetTitles}
-            onChange={(e) => setTargetTitles(e.target.value)}
-            placeholder="Software Engineer, Full Stack Developer"
-          />
-          <FormInput
-            label="Preferred locations"
-            id="locations"
-            value={preferredLocations}
-            onChange={(e) => setPreferredLocations(e.target.value)}
-            placeholder="Remote, San Francisco, New York"
-          />
-          <div className="space-y-2">
-            <Label htmlFor="visa">Visa / work authorization</Label>
-            <Textarea
-              id="visa"
-              value={visaNotes}
-              onChange={(e) => setVisaNotes(e.target.value)}
-              rows={3}
-              placeholder="e.g. Authorized to work in the US, require sponsorship"
-            />
-          </div>
-        </div>
-      </Card>
-
-      <Card>
-        <SectionHeader
           title="Find jobs search keywords"
           description="LinkedIn search phrases for Find jobs. Toggle active to include or skip each keyword."
           action={
@@ -508,28 +451,6 @@ export function ProfileForm({
           onChange={(search_keywords: JobSearchKeywordEntry[]) =>
             setJobSearchPreferences((prev) => ({ ...prev, search_keywords }))
           }
-          targetTitlesAvailable={targetTitles
-            .split(",")
-            .map((s) => s.trim())
-            .some(Boolean)}
-          onImportFromTargetTitles={() => {
-            const titles = targetTitles
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean);
-            const existing = new Set(
-              jobSearchPreferences.search_keywords.map((k) =>
-                k.keyword.toLowerCase()
-              )
-            );
-            const imported = titles
-              .filter((t) => !existing.has(t.toLowerCase()))
-              .map((keyword) => createSearchKeywordEntry(keyword, true));
-            setJobSearchPreferences((prev) => ({
-              ...prev,
-              search_keywords: [...prev.search_keywords, ...imported],
-            }));
-          }}
         />
       </Card>
 
@@ -563,7 +484,7 @@ export function ProfileForm({
       <Card>
         <SectionHeader
           title="Work experience"
-          description="Roles and achievements used for tailoring."
+          description="Roles and achievements used for job match analysis."
           action={
             <Button
               type="button"

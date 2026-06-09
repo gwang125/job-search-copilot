@@ -30,7 +30,7 @@ describe("buildJobSearchQueryFromPreferences", () => {
     });
 
     assert.ok(plan.searchKeywords.length > 1);
-    assert.equal(plan.searchKeywords[0], "software engineer");
+    assert.match(plan.searchKeywords[0], /new grad|entry level|junior|0-2/i);
     assert.ok(plan.searchKeywords.some((q) => q === "software engineer"));
     assert.ok(plan.searchKeywords.some((q) => /entry level/i.test(q)));
     assert.ok(plan.searchKeywords.some((q) => /new grad/i.test(q)));

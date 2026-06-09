@@ -16,7 +16,6 @@ interface ProjectFieldsProps {
   onRemove: () => void;
 }
 
-/** Project form block — mirrors Job Analyzer “Job details” layout. */
 export function ProjectFields({
   index,
   project,
@@ -76,7 +75,7 @@ export function ProjectFields({
       <FormInput
         label="Technologies"
         id={`project-tech-${index}`}
-        hint="Comma-separated — shown on resume as Title | gRPC, MongoDB"
+        hint="Comma-separated, for example gRPC, MongoDB"
         placeholder="gRPC, MongoDB"
         value={(project.technologies ?? []).join(", ")}
         onChange={(e) =>
@@ -101,10 +100,10 @@ export function ProjectFields({
       </div>
 
       <div className="space-y-3 border-t border-zinc-200/80 pt-4">
-        <Label>Resume bullet points</Label>
+        <Label>Project bullet points</Label>
         <p className="text-xs text-zinc-500">
-          Short achievements for tailored resumes (optional if you use description
-          above).
+          Short achievements for matching context (optional if you use the
+          description above).
         </p>
         {(project.bullets ?? [""]).map((bullet, bi) => (
           <Textarea

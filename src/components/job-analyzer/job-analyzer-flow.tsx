@@ -575,19 +575,6 @@ export function JobAnalyzerFlow({ initialResumes }: JobAnalyzerFlowProps) {
             )}
           </Card>
 
-          {analysis.suggestedChanges.length > 0 && (
-            <Card className="space-y-3">
-              <h3 className="text-sm font-semibold text-zinc-900">
-                Suggestions before you apply
-              </h3>
-              <ul className="list-inside list-disc space-y-1 text-sm text-zinc-600">
-                {analysis.suggestedChanges.map((s, i) => (
-                  <li key={i}>{s}</li>
-                ))}
-              </ul>
-            </Card>
-          )}
-
           {appliedMessage && (
             <Alert variant="success">{appliedMessage}</Alert>
           )}

@@ -1,7 +1,7 @@
 import type { DiscoveredJobMatch } from "@/types/database";
 import type { LinkedInPostedWithin, LinkedInWorkType } from "@/lib/linkedin/search-jobs";
 
-const STORAGE_VERSION = 5;
+const STORAGE_VERSION = 6;
 
 export interface FindJobsSessionFilters {
   location: string;
@@ -10,6 +10,7 @@ export interface FindJobsSessionFilters {
   workType: LinkedInWorkType;
   minMatchScore: number;
   limit: number;
+  candidateLimit: number;
 }
 
 export interface FindJobsSessionMeta {

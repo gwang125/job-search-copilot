@@ -63,7 +63,7 @@ export default function SignupPage() {
             Create your account
           </h1>
           <p className="mt-2 text-sm text-zinc-500">
-            Start tailoring applications with AI
+            Start tracking smarter applications with AI
           </p>
         </div>
 

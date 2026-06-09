@@ -2,12 +2,8 @@ import { NextResponse } from "next/server";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { requireUser } from "@/lib/api-auth";
 import { pdfContentDisposition } from "@/lib/download-filename";
-import { ResumePdfDocument } from "@/lib/pdf/resume-pdf";
 import { CoverLetterPdfDocument } from "@/lib/pdf/cover-letter-pdf";
-import type {
-  GeneratedDocumentType,
-  TailoredResumeContent,
-} from "@/types/database";
+import type { GeneratedDocumentType } from "@/types/database";
 
 export const runtime = "nodejs";
 
@@ -19,10 +15,35 @@ export async function POST(request: Request) {
     const body = await request.json();
     const documentId = body.documentId as string | undefined;
     const documentType = body.documentType as GeneratedDocumentType | undefined;
+    const content = body.content as string | undefined;
+    const title = body.title as string | undefined;
+
+    if (documentType === "cover_letter" && content?.trim()) {
+      const buffer = await renderToBuffer(
+        <CoverLetterPdfDocument content={content.trim()} />
+      );
+
+      if (!buffer?.length) {
+        return NextResponse.json(
+          { error: "PDF generation produced an empty file" },
+          { status: 500 }
+        );
+      }
+
+      return new NextResponse(new Uint8Array(buffer), {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": pdfContentDisposition(
+            title ?? "Cover Letter",
+            "cover_letter"
+          ),
+        },
+      });
+    }
 
     if (!documentId || !documentType) {
       return NextResponse.json(
-        { error: "documentId and documentType are required" },
+        { error: "documentId and documentType, or content and documentType, are required" },
         { status: 400 }
       );
     }
@@ -45,47 +66,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: profile } = await auth.supabase
-      .from("profiles")
-      .select("name")
-      .eq("id", auth.user.id)
-      .single();
-
-    const candidateName = profile?.name ?? "Candidate";
-
-    let buffer: Buffer;
-
-    if (documentType === "tailored_resume") {
-      let content: TailoredResumeContent;
-      try {
-        const parsed = JSON.parse(doc.content) as TailoredResumeContent;
-        content = {
-          summary: parsed.summary ?? "",
-          skills: parsed.skills ?? [],
-          experience: (parsed.experience ?? []).map((exp) => ({
-            ...exp,
-            bullets: exp.bullets ?? [],
-          })),
-          education: parsed.education ?? [],
-          projects: (parsed.projects ?? []).map((proj) => ({
-            ...proj,
-            bullets: proj.bullets ?? [],
-          })),
-        };
-      } catch {
-        return NextResponse.json(
-          { error: "Invalid resume document content" },
-          { status: 400 }
-        );
-      }
-      buffer = await renderToBuffer(
-        <ResumePdfDocument name={candidateName} content={content} />
-      );
-    } else {
-      buffer = await renderToBuffer(
-        <CoverLetterPdfDocument content={doc.content} />
+    if (documentType !== "cover_letter") {
+      return NextResponse.json(
+        { error: "PDF export is only available for cover letters" },
+        { status: 400 }
       );
     }
+
+    const buffer = await renderToBuffer(
+      <CoverLetterPdfDocument content={doc.content} />
+    );
 
     if (!buffer?.length) {
       return NextResponse.json(
@@ -99,7 +89,7 @@ export async function POST(request: Request) {
         "Content-Type": "application/pdf",
         "Content-Disposition": pdfContentDisposition(
           doc.title,
-          documentType === "tailored_resume" ? "tailored_resume" : "cover_letter"
+          "cover_letter"
         ),
       },
     });

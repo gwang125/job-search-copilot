@@ -10,7 +10,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Job Search Copilot",
   description:
-    "AI-powered job search assistant — analyze roles, tailor resumes, and track applications.",
+    "AI-powered job search assistant - analyze roles, match resumes, and track applications.",
 };
 
 export default function RootLayout({
